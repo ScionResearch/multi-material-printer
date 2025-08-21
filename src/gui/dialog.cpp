@@ -1153,20 +1153,20 @@ void Dialog::optimizeForSmallScreen()
             ui->filesWidget->setMaximumHeight(40);
         }
         
-        // Apply very compact stylesheet for small screens
+        // Apply compact stylesheet with larger, more readable text
         setStyleSheet(styleSheet() + 
-            "QGroupBox { font-size: 7pt; padding-top: 5px; margin-top: 1px; margin-bottom: 1px; }"
+            "QGroupBox { font-size: 9pt; padding-top: 5px; margin-top: 1px; margin-bottom: 1px; }"
             "QGroupBox::title { padding: 0 2px 0 2px; }"
-            "QLabel { font-size: 7pt; min-width: 85px; }"
-            "QPushButton { font-size: 7pt; padding: 1px 3px; max-height: 20px; }"
-            "QTableWidget { font-size: 6pt; }"
-            "QTextBrowser { font-size: 6pt; }"
-            "QListWidget { font-size: 6pt; }"
+            "QLabel { font-size: 9pt; min-width: 85px; }"
+            "QPushButton { font-size: 9pt; padding: 1px 3px; max-height: 22px; }"
+            "QTableWidget { font-size: 8pt; }"
+            "QTextBrowser { font-size: 9pt; }" // Much larger text for output
+            "QListWidget { font-size: 8pt; }"
             "QVBoxLayout { spacing: 1px; }"
             "QHBoxLayout { spacing: 2px; }"
-            "QProgressBar { max-height: 12px; font-size: 6pt; }"
-            "QComboBox, QSpinBox { font-size: 6pt; max-height: 18px; }"
-            "QLineEdit { font-size: 6pt; max-height: 18px; }"
+            "QProgressBar { max-height: 14px; font-size: 8pt; }"
+            "QComboBox, QSpinBox { font-size: 8pt; max-height: 20px; }"
+            "QLineEdit { font-size: 8pt; max-height: 20px; }"
         );
         
         // Make status labels wider to prevent text cutoff
@@ -1185,8 +1185,13 @@ void Dialog::optimizeForSmallScreen()
             }
         }
         
-        // Set window to be resizable for small screens
-        setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
-        setMaximumHeight(450); // Hard cap on window height
+        // Set window to be fully resizable and expandable
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+        setMaximumHeight(16777215); // Remove height restriction for maximizing
+        
+        // Ensure the main layout expands to fill all available space
+        if (layout()) {
+            layout()->setSizeConstraint(QLayout::SetDefaultConstraint);
+        }
     }
 }
