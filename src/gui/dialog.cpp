@@ -1219,7 +1219,7 @@ void Dialog::setupTooltips()
     ui->addRecipeRow->setToolTip("Add a new layer for material change");
     ui->removeRecipeRow->setToolTip("Remove selected row from recipe");
     ui->loadRecipe->setToolTip("Load a previously saved recipe from file");
-    ui->saveRecipe->setToolTip("Save current recipe to file");
+    ui->submitline->setToolTip("Save current recipe to file");
     
     // Printer control tooltips
     ui->checkstatus->setToolTip("Check printer connection and current status");
@@ -1249,7 +1249,7 @@ void Dialog::setupKeyboardShortcuts()
 {
     // Create keyboard shortcuts for common actions
     QShortcut *saveShortcut = new QShortcut(QKeySequence("Ctrl+S"), this);
-    connect(saveShortcut, &QShortcut::activated, this, &Dialog::on_saveRecipe_clicked);
+    connect(saveShortcut, &QShortcut::activated, this, &Dialog::on_submitline_clicked);
     
     QShortcut *checkStatusShortcut = new QShortcut(QKeySequence("F5"), this);
     connect(checkStatusShortcut, &QShortcut::activated, this, &Dialog::on_checkstatus_clicked);
