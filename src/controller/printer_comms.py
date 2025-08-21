@@ -123,9 +123,27 @@ class PrinterCommunicator:
         Get current printer status via uart-wifi.
         
         Returns:
-            str: Status response with state, layer, progress info
+            dict: Status info with state, layer, progress, or None if error
         """
-        return self._run_printer_command('getstatus')
+        try:
+            uart = self._get_uart_connection()
+            responses = uart.send_request("getstatus")
+            
+            if responses:
+                status_obj = responses[0]
+                # Return structured data instead of raw string
+                return {
+                    'status': getattr(status_obj, 'status', 'unknown'),
+                    'current_layer': getattr(status_obj, 'current_layer', 0),
+                    'percent_complete': getattr(status_obj, 'percent_complete', 0),
+                    'raw_response': str(status_obj)
+                }
+            return None
+                
+        except Exception as e:
+            print(f"Error getting printer status: {e}")
+            self._uart_wifi = None
+            return None
     
     def pause_print(self):
         """
@@ -159,15 +177,33 @@ class PrinterCommunicator:
     
     def get_files(self):
         """
-        Get list of printable files on printer.
+        Get list of printable files on printer via uart-wifi 'getfile' command.
         
         Returns:
-            list: Available filenames or empty list if error
+            list: List of file info dicts with external/internal names, or empty list if error
         """
-        response = self._run_printer_command('getfiles')
-        if response:
-            return response.split('\n')
-        return []
+        try:
+            uart = self._get_uart_connection()
+            responses = uart.send_request("getfile")
+            
+            if responses:
+                file_list_obj = responses[0]
+                files = []
+                # Handle FileList object with MonoXFileEntry objects
+                if hasattr(file_list_obj, 'files'):
+                    for file_entry in file_list_obj.files:
+                        files.append({
+                            'external': getattr(file_entry, 'external', 'unknown'),
+                            'internal': getattr(file_entry, 'internal', 'unknown'),
+                            'display_name': getattr(file_entry, 'external', 'unknown')
+                        })
+                return files
+            return []
+                
+        except Exception as e:
+            print(f"Error getting file list: {e}")
+            self._uart_wifi = None
+            return []
     
     def start_print(self, filename):
         """
@@ -192,6 +228,32 @@ class PrinterCommunicator:
         """
         return self._run_printer_command('getmode')
     
+    def get_system_info(self):
+        """
+        Get printer system information via uart-wifi 'sysinfo' command.
+        
+        Returns:
+            dict: System info with model, firmware, serial, or None if error
+        """
+        try:
+            uart = self._get_uart_connection()
+            responses = uart.send_request("sysinfo")
+            
+            if responses:
+                info_obj = responses[0]
+                return {
+                    'model': getattr(info_obj, 'model', 'unknown'),
+                    'firmware': getattr(info_obj, 'firmware', 'unknown'), 
+                    'serial': getattr(info_obj, 'serial', 'unknown'),
+                    'raw_response': str(info_obj)
+                }
+            return None
+                
+        except Exception as e:
+            print(f"Error getting system info: {e}")
+            self._uart_wifi = None
+            return None
+    
     def is_connected(self):
         """
         Test printer connectivity.
@@ -200,7 +262,23 @@ class PrinterCommunicator:
             bool: True if printer responds
         """
         status = self.get_status()
-        return status is not None and len(status) > 0
+        return status is not None
+    
+    def get_detailed_status(self):
+        """
+        Get comprehensive printer status including progress and system info.
+        
+        Returns:
+            dict: Combined status and system information
+        """
+        status = self.get_status()
+        if status:
+            # Add system info if available
+            sys_info = self.get_system_info()
+            if sys_info:
+                status['system_info'] = sys_info
+            return status
+        return None
 
 
 # Global instance for easy access
@@ -256,6 +334,20 @@ def start_print(filename, printer_ip=None):
         comm.printer_ip = printer_ip
     return comm.start_print(filename)
 
+def get_system_info(printer_ip=None):
+    """Get system info (convenience function)."""
+    comm = get_communicator()
+    if printer_ip:
+        comm.printer_ip = printer_ip
+    return comm.get_system_info()
+
+def get_detailed_status(printer_ip=None):
+    """Get detailed status with progress and system info (convenience function)."""
+    comm = get_communicator()
+    if printer_ip:
+        comm.printer_ip = printer_ip
+    return comm.get_detailed_status()
+
 
 if __name__ == "__main__":
     """
@@ -263,7 +355,7 @@ if __name__ == "__main__":
     
     Usage: python printer_comms.py -i <printer_ip> -c <command>
     
-    Commands: getstatus, gopause, goresume, gostop,end, getfile, getmode
+    Commands: getstatus, gopause, goresume, gostop,end, getfile, getmode, sysinfo, detailed
     """
     import sys
     
@@ -281,11 +373,48 @@ if __name__ == "__main__":
                 
                 comm = PrinterCommunicator()
                 comm.printer_ip = printer_ip
-                response = comm._run_printer_command(command)
-                if response:
-                    print(response)
+                
+                # Handle special commands that return structured data
+                if command == 'sysinfo':
+                    response = comm.get_system_info()
+                    if response:
+                        print(f"Model: {response['model']}")
+                        print(f"Firmware: {response['firmware']}")
+                        print(f"Serial: {response['serial']}")
+                    else:
+                        print("Failed to get system info")
+                elif command == 'detailed':
+                    response = comm.get_detailed_status()
+                    if response:
+                        print(f"Status: {response['status']}")
+                        print(f"Layer: {response['current_layer']}")
+                        print(f"Progress: {response['percent_complete']}%")
+                        if 'system_info' in response:
+                            print(f"Model: {response['system_info']['model']}")
+                    else:
+                        print("Failed to get detailed status")
+                elif command == 'getfile' or command == 'getfiles':
+                    # For GUI compatibility, output simple filenames on separate lines
+                    files = comm.get_files()
+                    if files:
+                        for file_info in files:
+                            print(file_info['display_name'])
+                    else:
+                        print("No files found")
+                elif command == 'getstatus':
+                    # For GUI compatibility, output raw status string
+                    response = comm._run_printer_command(command)
+                    if response:
+                        print(response)
+                    else:
+                        print("Command failed")
                 else:
-                    print("Command failed")
+                    # Standard commands
+                    response = comm._run_printer_command(command)
+                    if response:
+                        print(response)
+                    else:
+                        print("Command failed")
     else:
         print("Usage: python printer_comms.py -i <ip> -c <command>")
         print("Example: python printer_comms.py -i 192.168.4.2 -c getstatus")

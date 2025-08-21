@@ -178,21 +178,17 @@ class PrintManager:
             
     def _extract_current_layer(self, status):
         """
-        Extract current layer from status response.
+        Extract current layer from structured status response.
         
         Args:
-            status (str): Status response
+            status (dict): Structured status response from uart-wifi
             
         Returns:
             int: Layer number or None if parsing fails
         """
         try:
-            # This needs to be implemented based on your printer's response format
-            # For now, return a placeholder
-            if "layer" in status.lower():
-                # Extract layer number from status string
-                # Implementation depends on your printer's status format
-                pass
+            if status and isinstance(status, dict):
+                return status.get('current_layer', None)
             return None
         except Exception as e:
             print(f"Error extracting layer: {e}")
@@ -246,9 +242,11 @@ class PrintManager:
             return False
             
     def _is_print_complete(self, status):
-        """Check if print is complete based on status.""\
-        # Implementation depends on your printer's status format
-        return "complete" in status.lower() if status else False
+        """Check if print is complete based on structured status."""
+        if status and isinstance(status, dict):
+            printer_status = status.get('status', '').lower()
+            return printer_status in ['complete', 'finished', 'done'] or status.get('percent_complete', 0) >= 100
+        return False
 
 
 def main():
