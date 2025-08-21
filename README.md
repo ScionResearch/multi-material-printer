@@ -20,7 +20,19 @@ The system uses a single-board computer (like a Raspberry Pi) to act as an inter
 
 ## Capabilities
 
-TBC
+### System Features
+- **Network Management:** Switch between Access Point mode (creates own WiFi) and client mode (connects to existing WiFi)
+- **File Management:** List and select printable files stored on the printer's internal memory
+- **Standard Print Operations:** Start, pause, resume, and stop prints directly from the interface
+- **Multi-Material Recipe System:** Define sequences of material changes based on specific layer numbers
+- **Automated Print Execution:** The system automatically executes multi-material recipes by:
+  1. Continuously polling the printer for its current layer number
+  2. Pausing the print job when a target layer is reached
+  3. Activating the correct pumps to perform the material swap
+  4. Resuming the print job automatically
+- **Manual Pump Control:** Run any pump forwards or backwards for specified durations (maintenance and setup)
+- **Live Operation Logging:** Real-time feedback on commands sent, printer status, and script actions
+- **Configuration Management:** External configuration files for network settings and pump profiles
 
 ---
 
@@ -57,6 +69,59 @@ TBC
    make
    ../../build/ScionMMUController
    ```
+
+## 📖 Usage Guide
+
+### Network Setup Options
+
+**Option A: Access Point Mode (Recommended for initial setup)**
+1. Run the AP setup script:
+   ```bash
+   sudo ./tools/startAP.sh
+   ```
+2. Pi will reboot and create its own WiFi network
+3. Connect your printer to this network (default IP: 192.168.4.2)
+
+**Option B: WiFi Client Mode**  
+1. Edit network configuration:
+   ```bash
+   nano config/network_settings.ini
+   ```
+2. Switch to client mode:
+   ```bash
+   sudo ./tools/stopAP.sh  
+   ```
+3. Both Pi and printer connect to your existing WiFi
+
+### Using the GUI
+
+1. **Launch the Application:**
+   ```bash
+   ./build/ScionMMUController
+   ```
+
+2. **Check Connection:**
+   - Click **"Check Status"** button
+   - Status should show "Connected..." if printer is reachable
+
+3. **Setup Multi-Material Print:**
+   - Define material recipe in format: `MATERIAL,LAYER:MATERIAL,LAYER`
+   - Example: `A,50:B,120:C,200` (switch to A at layer 50, B at 120, C at 200)
+   - Click **"Set"** to save recipe
+
+4. **Start Multi-Material Print:**
+   - Start print job on printer (or use "Get Files" to select from GUI)
+   - Click **"Begin MM"** to start automated material swapping
+   - System monitors layers and performs swaps automatically
+
+### Manual Controls
+
+- **Motor Control:** Test pumps with format `PUMP,DIRECTION,TIME` (e.g., `A,F,30`)
+  - `PUMP`: A, B, C, or D
+  - `DIRECTION`: F (Forward) or R (Reverse)  
+  - `TIME`: Duration in seconds
+- **Printer Controls:** Direct pause/resume/stop commands to printer
+- **Stop MM:** Halt automated material swapping (printer continues)
 
 ## 📁 Project Structure
 
