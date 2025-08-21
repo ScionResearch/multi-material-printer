@@ -102,7 +102,7 @@
            <item>
             <widget class="QGroupBox" name="statusGroupBox">
              <property name="title">
-              <string>Printer Status</string>
+              <string></string>
              </property>
              <layout class="QVBoxLayout" name="statusVerticalLayout">
               <item>
@@ -308,7 +308,7 @@
        <item>
         <widget class="QGroupBox" name="printControlGroupBox">
          <property name="title">
-          <string>Print Management</string>
+          <string></string>
          </property>
          <layout class="QVBoxLayout" name="printControlLayout">
           <item>

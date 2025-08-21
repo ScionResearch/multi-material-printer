@@ -555,9 +555,9 @@ void Dialog::setupRecipeTable()
     headers << "Layer Number" << "Material Pump";
     ui->recipeTable->setHorizontalHeaderLabels(headers);
     
-    // Set column widths
-    ui->recipeTable->setColumnWidth(0, 120);
-    ui->recipeTable->setColumnWidth(1, 150);
+    // Set column widths - make layer number column wider for 3-4 digits
+    ui->recipeTable->setColumnWidth(0, 140);
+    ui->recipeTable->setColumnWidth(1, 180);
     
     // Enable row selection and alternating colors
     ui->recipeTable->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -580,6 +580,7 @@ void Dialog::addRecipeTableRow(int layerNum, const QString &material)
     layerSpinBox->setMinimum(1);
     layerSpinBox->setMaximum(9999);
     layerSpinBox->setValue(layerNum);
+    layerSpinBox->setMinimumWidth(80); // Make wider to fit 3-4 digits comfortably
     ui->recipeTable->setCellWidget(row, 0, layerSpinBox);
     
     // Add combo box for material selection
@@ -1176,9 +1177,9 @@ void Dialog::optimizeForSmallScreen()
             ui->filesWidget->setMaximumHeight(40);
         }
         
-        // Apply compact stylesheet with larger, more readable text and proper title spacing
+        // Apply compact stylesheet with larger, more readable text and minimal group box padding
         setStyleSheet(styleSheet() + 
-            "QGroupBox { font-size: 9pt; padding-top: 15px; margin-top: 5px; margin-bottom: 2px; }"
+            "QGroupBox { font-size: 9pt; padding-top: 5px; margin-top: 2px; margin-bottom: 2px; border: 1px solid #ccc; }"
             "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 5px 0 5px; top: -7px; left: 10px; }"
             "QLabel { font-size: 9pt; min-width: 85px; }"
             "QPushButton { font-size: 9pt; padding: 1px 3px; max-height: 22px; }"
@@ -1199,12 +1200,12 @@ void Dialog::optimizeForSmallScreen()
         if (ui->progressLabel) ui->progressLabel->setMinimumWidth(90);
         if (ui->nextMaterialLabel) ui->nextMaterialLabel->setMinimumWidth(90);
         
-        // Find all group boxes and apply layout with proper title space
+        // Find all group boxes and apply minimal layout margins since no titles
         QList<QGroupBox*> groupBoxes = findChildren<QGroupBox*>();
         for (QGroupBox* groupBox : groupBoxes) {
             if (groupBox->layout()) {
-                groupBox->layout()->setContentsMargins(4, 8, 4, 2); // More top margin for title
-                groupBox->layout()->setSpacing(2);
+                groupBox->layout()->setContentsMargins(5, 3, 5, 3); // Minimal margins without titles
+                groupBox->layout()->setSpacing(3);
             }
         }
         
