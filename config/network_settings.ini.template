@@ -3,10 +3,10 @@
 
 [wifi]
 # WiFi network settings
-ssid = ""
-password = ""
+ssid = "PumpedMMP"
+password = "00000000"
 # Set to true to connect to existing WiFi network
-enabled = false
+enabled = true
 
 [access_point]
 # Access Point mode settings
@@ -15,13 +15,13 @@ password = "scionmmu123"
 # IP address range for AP mode
 ip_address = "192.168.4.1"
 # Set to true to enable AP mode (disables WiFi client mode)
-enabled = true
+enabled = false
 
 [printer]
 # Printer connection settings
 # Auto-discovery will be attempted if ip_address is empty
-ip_address = ""
-port = 80
+ip_address = "192.168.4.3"
+port = 6000
 # Timeout for printer communication (seconds)
 timeout = 10
 
