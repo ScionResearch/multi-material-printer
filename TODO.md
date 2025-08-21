@@ -8,13 +8,13 @@ This document outlines the current development status and remaining tasks for th
 
 ✅ **Foundation Complete** - Project restructuring, configuration management, and core architecture are implemented.
 ✅ **GUI Enhancements Complete** - Advanced user interface with real-time monitoring and streamlined workflows.
-🔧 **Active Development** - Critical installation and dependency fixes.
-📋 **Future Features** - Network management, hardware control, and safety features.
+✅ **Installation & Dependencies Complete** - uart-wifi integration, modern library architecture, and legacy code cleanup.
+🔧 **Active Development** - Network management, hardware control, and safety features.
+📋 **Future Features** - Advanced analytics, remote monitoring, and smart optimization features.
 
 ---
 
-## ✅ COMPLETED WORK (Phases 1 & 2)
-
+## ✅ COMPLETED WORK (Phases 1, 2 & 3)
 
 ### Code Structure, Configuration & GUI Workflow
 - ✅ **Clean Architecture:** Well-defined `src/`, `config/`, `tools/`, and `build/` directories.
@@ -25,68 +25,16 @@ This document outlines the current development status and remaining tasks for th
 - ✅ **Asynchronous Operations:** A `QThread`-based worker (`ScriptWorker`) ensures the GUI remains responsive by running all communication and hardware tasks in the background.
 - ✅ **Robust Error Handling:** The system can detect and gracefully handle connection failures and hardware errors, providing clear feedback to the user.
 
----
+### Installation & Architecture (Phase 3 - COMPLETE)
+- ✅ **uart-wifi Dependency Integrated:** Added `uart-wifi>=0.2.1` to `requirements.txt` for reliable PyPI installation.
+- ✅ **printer_comms.py Modernized:** Fully refactored to use uart-wifi library with structured responses, proper error handling, and connection management.
+- ✅ **Legacy Scripts Archived:** Moved obsolete scripts (`newmonox.py`, `newcommunication.py`, `guitest.py`, `pollphoton.py`) to `src/controller/archive/` folder.
+- ✅ **Clean Library Architecture:** Application now imports uart-wifi library instead of running external scripts via subprocess.
+- ✅ **Installation Script Updated:** `tools/install_dependencies.sh` simplified to use standardized `requirements.txt`.
 
-## 🚨 CRITICAL PRIORITY - Installation & Architecture Fixes
-
-**URGENT:** These issues must be resolved before the project can be successfully installed and run on a fresh Raspberry Pi system.
-
-### Missing Dependencies & Installation Issues
-- [ ] **1. Integrate the `uart-wifi` Dependency**
-    -   ⚠️ **Critical Issue:** The project relies on the `uart-wifi` library for printer communication, but it is not included in the dependencies.
-    -   **Action (Refined):** Add the official `uart-wifi` package from PyPI to `requirements.txt`. This is the standard and most reliable method.
-        ```
-        # In requirements.txt
-        uart-wifi>=0.2.1
-        ```
-    -   **Architectural Goal:** This change solidifies the architecture. Your application will **import** this library, not contain copies of its scripts.
-
-- [ ] **2. Refactor `printer_comms.py` to Use the `uart-wifi` Library**
-    -   ⚠️ **Critical Issue:** The current C++ code may still be calling legacy scripts via `subprocess`.
-    -   **Action:** Ensure all printer communication is handled by importing and using the `uart-wifi` library classes within your Python modules. This is a fundamental architectural shift from running scripts to using a library.
-        ```python
-        # Example of the new approach in your printer_comms.py
-        from uart_wifi.communication import UartWifi
-        from uart_wifi.errors import ConnectionException
-
-        def get_status(printer_ip, port=6000):
-            try:
-                uart = UartWifi(printer_ip, port)
-                responses = uart.send_request("getstatus")
-                # ... process and return the response object ...
-            except ConnectionException as e:
-                # ... handle the error ...
-        ```
-
-- [ ] **3. Strengthen Installation Script (`tools/install_dependencies.sh`)**
-    -   **Problem:** The script must reliably install all Python dependencies.
-    -   **Action:** Simplify the script to use the updated `requirements.txt`.
-        ```bash
-        # (in install_dependencies.sh)
-        echo "Installing all required Python packages..."
-        pip3 install --upgrade pip
-        pip3 install -r requirements.txt
-        echo "Python dependencies installed successfully."
-        ```
-
-- [ ] **4. Document Required Hardware Configuration (I2C)**
-    -   **Critical:** The Adafruit motor controllers will fail if the I2C interface is not enabled.
-    -   **Action:** Add a mandatory setup step to the `README.md` installation guide.
-        ```markdown
-        ### 1a. Enable Hardware Interfaces (First-Time Raspberry Pi Setup)
-        1. Run: `sudo raspi-config`
-        2. Go to: `3 Interface Options` -> `I5 I2C`.
-        3. Select `<Yes>` to enable the I2C interface and reboot.
-        ```
-
-### Legacy Code Management
-- [ ] **Archive Redundant Scripts**
-    -   **Problem:** Old scripts in `src/controller/` are now obsolete and create confusion.
-    -   **Action:** Once `printer_comms.py` is fully refactored to use the `uart-wifi` library, move the following scripts to the `archive/` folder to finalize the clean architecture:
-        -   `newmonox.py`
-        -   `newcommunication.py`
-        -   `guitest.py`
-        -   `pollphoton.py` (if its logic is fully absorbed by `print_manager.py` and the GUI).
+- [ ] **Document Required Hardware Configuration (I2C)**
+    -   **Remaining:** Add I2C setup instructions to `README.md` installation guide.
+    -   **Action:** Document the mandatory Raspberry Pi I2C interface setup for Adafruit motor controllers.
 
 ---
 
