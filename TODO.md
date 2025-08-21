@@ -6,79 +6,91 @@ This document outlines the current development status and remaining tasks for th
 
 ## Project Status Overview
 
-✅ **Foundation Complete** - Project restructuring, configuration management, and core architecture are implemented  
-🔧 **Active Development** - GUI enhancements and user workflow improvements  
-📋 **Future Features** - Advanced functionality and optimization  
+✅ **Foundation Complete** - Project restructuring, configuration management, and core architecture are implemented.
+✅ **GUI Enhancements Complete** - Advanced user interface with real-time monitoring and streamlined workflows.
+🔧 **Active Development** - Critical installation and dependency fixes.
+📋 **Future Features** - Network management, hardware control, and safety features.
 
 ---
 
-## ✅ COMPLETED WORK (Phase 1 - Foundation)
+## ✅ COMPLETED WORK (Phases 1 & 2)
 
-### Code Structure & Organization
-- ✅ **Directory Structure** - Clean `src/`, `config/`, `tools/`, `build/` organization
-- ✅ **File Migration** - All source files moved to appropriate locations
-- ✅ **Build System** - Updated Qt project files (`ScionMMUController.pro`)
-- ✅ **Git Configuration** - `.gitignore` file created and configured
-- ✅ **Python Module Structure** - Created `__init__.py` and proper package structure
 
-### Configuration Management  
-- ✅ **ConfigManager Class** - Dynamic configuration loading from INI files
-- ✅ **Network Settings** - `network_settings.ini.template` for IP configuration
-- ✅ **Pump Profiles** - `pump_profiles.json` for hardware settings
-- ✅ **Path Resolution** - Eliminated all hardcoded paths
-
-### Python Module Refactoring
-- ✅ **printer_comms.py** - Clean interface for printer communication
-- ✅ **mmu_control.py** - Multi-material unit control wrapper
-- ✅ **print_manager.py** - Print orchestration module
-
-### Bug Fixes
-- ✅ **Script Path Issues** - Fixed hardcoded `/home/pidlp/pidlp/dev/scripts/` references
-- ✅ **IP Address Configuration** - Removed hardcoded `192.168.4.2` references
-- ✅ **Shell Script Errors** - Fixed typos in network management scripts
+### Code Structure, Configuration & GUI Workflow
+- ✅ **Clean Architecture:** Well-defined `src/`, `config/`, `tools/`, and `build/` directories.
+- ✅ **Externalized Configuration:** All hardcoded paths and settings (IP addresses, pump profiles) have been moved to `.ini` and `.json` files.
+- ✅ **Modular Python Code:** Core logic refactored into `printer_comms.py`, `mmu_control.py`, and `print_manager.py`.
+- ✅ **Visual Recipe Editor:** A table-based UI allows for intuitive creation and management of material change recipes, eliminating manual entry errors.
+- ✅ **Dynamic Status Display:** The GUI provides real-time, color-coded feedback on printer status, progress, and upcoming material changes.
+- ✅ **Asynchronous Operations:** A `QThread`-based worker (`ScriptWorker`) ensures the GUI remains responsive by running all communication and hardware tasks in the background.
+- ✅ **Robust Error Handling:** The system can detect and gracefully handle connection failures and hardware errors, providing clear feedback to the user.
 
 ---
 
-## 🔧 HIGH PRIORITY - Current Development Focus
+## 🚨 CRITICAL PRIORITY - Installation & Architecture Fixes
 
-### GUI Workflow Improvements
-- [ ] **Visual Recipe Editor** - Replace text input with table-based material change editor
-  - Table widget with "Layer Number" and "Material" columns
-  - Add/Remove row buttons for recipe management
-  - Material dropdown selection (Pump A, B, C, D)
-  - Automatic recipe file generation
+**URGENT:** These issues must be resolved before the project can be successfully installed and run on a fresh Raspberry Pi system.
 
-- [ ] **Dynamic Printer Status Display** - Real-time status monitoring
-  - Live status updates (Printing/Paused/Idle)
-  - Current file and progress display
-  - Next material change information
-  - Connection status indicator
+### Missing Dependencies & Installation Issues
+- [ ] **1. Integrate the `uart-wifi` Dependency**
+    -   ⚠️ **Critical Issue:** The project relies on the `uart-wifi` library for printer communication, but it is not included in the dependencies.
+    -   **Action (Refined):** Add the official `uart-wifi` package from PyPI to `requirements.txt`. This is the standard and most reliable method.
+        ```
+        # In requirements.txt
+        uart-wifi>=0.2.1
+        ```
+    -   **Architectural Goal:** This change solidifies the architecture. Your application will **import** this library, not contain copies of its scripts.
 
-- [ ] **Streamlined Print Management** - Single-button print workflow
-  - "Start Multi-Material Print" button
-  - Automatic pre-print validation
-  - Integrated file selection and recipe confirmation
+- [ ] **2. Refactor `printer_comms.py` to Use the `uart-wifi` Library**
+    -   ⚠️ **Critical Issue:** The current C++ code may still be calling legacy scripts via `subprocess`.
+    -   **Action:** Ensure all printer communication is handled by importing and using the `uart-wifi` library classes within your Python modules. This is a fundamental architectural shift from running scripts to using a library.
+        ```python
+        # Example of the new approach in your printer_comms.py
+        from uart_wifi.communication import UartWifi
+        from uart_wifi.errors import ConnectionException
 
-### System Reliability
-- [ ] **Asynchronous Operations** - Prevent GUI freezing
-  - Implement QProcess signals for script execution  
-  - Move long operations to QThread
-  - Progress indicators for all operations
+        def get_status(printer_ip, port=6000):
+            try:
+                uart = UartWifi(printer_ip, port)
+                responses = uart.send_request("getstatus")
+                # ... process and return the response object ...
+            except ConnectionException as e:
+                # ... handle the error ...
+        ```
 
-- [ ] **Robust Error Handling** - Connection and hardware failure recovery
-  - Printer connectivity validation
-  - Pump failure detection and alerts
-  - Network interruption handling
-  - Clear error messaging to users
+- [ ] **3. Strengthen Installation Script (`tools/install_dependencies.sh`)**
+    -   **Problem:** The script must reliably install all Python dependencies.
+    -   **Action:** Simplify the script to use the updated `requirements.txt`.
+        ```bash
+        # (in install_dependencies.sh)
+        echo "Installing all required Python packages..."
+        pip3 install --upgrade pip
+        pip3 install -r requirements.txt
+        echo "Python dependencies installed successfully."
+        ```
 
-- [ ] **Memory Management** - Qt object lifecycle fixes
-  - Investigate potential memory leaks
-  - Ensure proper cleanup on dialog destruction
-  - Thread safety for GUI updates
+- [ ] **4. Document Required Hardware Configuration (I2C)**
+    -   **Critical:** The Adafruit motor controllers will fail if the I2C interface is not enabled.
+    -   **Action:** Add a mandatory setup step to the `README.md` installation guide.
+        ```markdown
+        ### 1a. Enable Hardware Interfaces (First-Time Raspberry Pi Setup)
+        1. Run: `sudo raspi-config`
+        2. Go to: `3 Interface Options` -> `I5 I2C`.
+        3. Select `<Yes>` to enable the I2C interface and reboot.
+        ```
+
+### Legacy Code Management
+- [ ] **Archive Redundant Scripts**
+    -   **Problem:** Old scripts in `src/controller/` are now obsolete and create confusion.
+    -   **Action:** Once `printer_comms.py` is fully refactored to use the `uart-wifi` library, move the following scripts to the `archive/` folder to finalize the clean architecture:
+        -   `newmonox.py`
+        -   `newcommunication.py`
+        -   `guitest.py`
+        -   `pollphoton.py` (if its logic is fully absorbed by `print_manager.py` and the GUI).
 
 ---
 
-## 📋 MEDIUM PRIORITY - Feature Enhancements
+## 🔧 HIGH PRIORITY - Next Development Focus
 
 ### Network & Discovery
 - [ ] **Integrated Network Manager** - GUI-based WiFi management
@@ -136,42 +148,3 @@ This document outlines the current development status and remaining tasks for th
   - Web interface for status checking
   - Notification systems
   - Mobile integration considerations
-
----
-
-## 📊 Development Priorities
-
-### Immediate (Next 4-6 weeks)
-1. Visual Recipe Editor implementation
-2. Dynamic Printer Status Display  
-3. Asynchronous operation refactoring
-4. Basic error handling improvements
-
-### Short Term (2-3 months)
-1. Network management integration
-2. Pump calibration system
-3. Pre-print validation
-4. Safety feature implementation
-
-### Long Term (6+ months)
-1. Advanced material management
-2. Print optimization algorithms
-3. Remote monitoring capabilities
-4. Analytics and reporting features
-
----
-
-## 🎯 Success Metrics
-
-- **Setup Time:** < 30 minutes for new users
-- **Print Start Time:** < 5 minutes from GUI launch to print start  
-- **Error Rate:** < 1% failed material changes
-- **Build Time:** < 2 minutes on Raspberry Pi 4
-- **Memory Usage:** < 100MB during operation
-
----
-
-*This roadmap is regularly updated based on development progress and user feedback.*
-
-
-
