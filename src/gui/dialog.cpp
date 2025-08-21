@@ -156,7 +156,9 @@ void Dialog::showEvent(QShowEvent* event)
     if (!timer)
     {
         timer = new QTimer(this);
-        connect(timer, &QTimer::timeout, this, &Dialog::updateConnectionStatus);
+        connect(timer, &QTimer::timeout, this, [this]() { 
+            updateConnectionStatus(); 
+        });
         timer->start(5000);  // Adjust the interval (in milliseconds) according to your needs
     }
 }
