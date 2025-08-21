@@ -163,7 +163,8 @@ void Dialog::showEvent(QShowEvent* event)
 
 void Dialog::updateConnectionStatus()
 {
-
+    // This method is called by the timer to periodically check status
+    updateStatusDisplay();
 }
 
 void Dialog::on_startPr_clicked()
@@ -198,7 +199,7 @@ void Dialog::on_startPr_clicked()
             });
             
             connect(pythonProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
+                this, [this](int exitCode, QProcess::ExitStatus /*exitStatus*/) {
                     ui->textBrowser->append(QString("Process finished with exit code: %1").arg(exitCode));
                     pythonProcess->deleteLater();
                     pythonProcess = nullptr;
@@ -360,7 +361,7 @@ if (inputValues.size() != 3)
         });
         
         connect(pythonFunction, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
+            this, [this](int exitCode, QProcess::ExitStatus /*exitStatus*/) {
                 ui->textBrowser->append(QString("Motor process finished with exit code: %1").arg(exitCode));
                 pythonFunction->deleteLater();
                 pythonFunction = nullptr;
@@ -699,8 +700,8 @@ void Dialog::parseStatusResponse(const QString &response)
     }
     
     // Extract current file information if available
-    QRegExp fileRegex("file[:\\s]+([^\\n\\r]+)");
-    if (fileRegex.indexIn(response, 0, QRegExp::CarelessCompare) != -1)
+    QRegExp fileRegex("file[:\\s]+([^\\n\\r]+)", Qt::CaseInsensitive);
+    if (fileRegex.indexIn(response, 0) != -1)
     {
         ui->currentFileValue->setText(fileRegex.cap(1).trimmed());
     }
@@ -818,7 +819,7 @@ void Dialog::on_startMultiMaterialPrint_clicked()
             });
             
             connect(pythonProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
+                this, [this](int /*exitCode*/, QProcess::ExitStatus exitStatus) {
                     if (exitStatus == QProcess::NormalExit)
                     {
                         ui->textBrowser->append("Multi-material print process completed.");

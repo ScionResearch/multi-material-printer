@@ -78,7 +78,7 @@ void ScriptWorker::checkStatus(const QString &scriptPath, const QString &printer
     {
         currentProcess = new QProcess(this);
         connect(currentProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
+                this, [this](int /*exitCode*/, QProcess::ExitStatus exitStatus) {
                     QString output = currentProcess->readAllStandardOutput();
                     QString error = currentProcess->readAllStandardError();
                     
