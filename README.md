@@ -74,24 +74,30 @@ The system uses a single-board computer (like a Raspberry Pi) to act as an inter
 
 ### Network Setup Options
 
-**Option A: Access Point Mode (Recommended for initial setup)**
-1. Run the AP setup script:
-   ```bash
-   sudo ./tools/startAP.sh
-   ```
-2. Pi will reboot and create its own WiFi network
-3. Connect your printer to this network (default IP: 192.168.4.2)
+**Current Setup (ESP32 Gateway + Access Point Mode)**
+*Note: This configuration is specific to the current hardware setup*
 
-**Option B: WiFi Client Mode**  
-1. Edit network configuration:
+Network topology:
+- **192.168.4.1** - ESP32 WiFi gateway/router 
+- **192.168.4.2** - Raspberry Pi (control unit)
+- **192.168.4.3** - 3D Printer (communication endpoint)
+
+1. The ESP32 creates the WiFi network and acts as gateway
+2. Configure printer IP in your setup:
    ```bash
+   cp config/network_settings.ini.template config/network_settings.ini
    nano config/network_settings.ini
    ```
-2. Switch to client mode:
-   ```bash
-   sudo ./tools/stopAP.sh  
+   Update the `[printer]` section:
+   ```ini
+   [printer]
+   ip_address = "192.168.4.3"
+   port = 6000
    ```
-3. Both Pi and printer connect to your existing WiFi
+
+**Alternative: Standard WiFi Client Mode**  
+1. Switch to client mode: `sudo ./tools/stopAP.sh`
+2. Both Pi and printer connect to existing WiFi (requires IP discovery)
 
 ### Using the GUI
 
@@ -126,17 +132,19 @@ The system uses a single-board computer (like a Raspberry Pi) to act as an inter
 ## 📁 Project Structure
 
 ```
-scionresearch-multi-material-printer/
+multi-material-printer/
 ├── README.md                    # This file
-├── TODO.md                      # Development roadmap and known issues
+├── TODO.md                      # Development roadmap and tasks
 ├── .gitignore                   # Git ignore rules
+├── requirements.txt             # Python dependencies
 │
+├── archive/                     # Archived legacy files
 ├── build/                       # Compiled applications and build artifacts
 │   └── ScionMMUController       # Main GUI executable (after build)
 │
 ├── config/                      # Configuration files
 │   ├── network_settings.ini.template  # Network configuration template
-│   ├── network_settings.ini     # User network settings (created from template)
+│   ├── network_settings.ini     # User network settings (create from template)
 │   ├── pump_profiles.json       # Pump calibration and profiles
 │   └── wpa_supplicant.conf      # WiFi configuration (legacy)
 │
@@ -144,45 +152,54 @@ scionresearch-multi-material-printer/
 │   ├── gui/                     # Qt C++ GUI application
 │   │   ├── main.cpp             # Application entry point
 │   │   ├── dialog.cpp/.h        # Main dialog window
+│   │   ├── configmanager.cpp/.h # Configuration management
 │   │   ├── dialog.ui            # UI layout file
 │   │   ├── ScionMMUController.pro # Qt project file
 │   │   ├── assets.qrc           # Qt resource file
 │   │   └── assets/              # Images and UI resources
-│   │       ├── Picture1.png
-│   │       └── Picture2.png
 │   │
 │   └── controller/              # Python control modules
 │       ├── __init__.py          # Python package initialization
-│       ├── print_manager.py     # Main print orchestration (was pollphoton.py)
-│       ├── mmu_control.py       # Pump control logic (was photonmmu_pump.py)
-│       ├── printer_comms.py     # Printer communication (was newmonox.py)
-│       └── guitest.py           # Legacy GUI testing utilities
+│       ├── print_manager.py     # Print orchestration wrapper
+│       ├── mmu_control.py       # Pump control wrapper
+│       ├── printer_comms.py     # Printer communication wrapper
+│       ├── pollphoton.py        # Original polling script
+│       ├── newmonox.py          # Original printer communication
+│       └── photonmmu_pump.py    # Original pump control
 │
 └── tools/                       # Utilities and setup scripts
     ├── install_dependencies.sh  # System setup script
     ├── startAP.sh               # Enable WiFi access point mode
-    └── stopAP.sh                # Disable access point, return to client mode
+    └── stopAP.sh                # Switch to WiFi client mode
 ```
 ## 🛠️ Configuration
 
-### Network Setup
-Edit `config/network_settings.ini`:
+### Network Configuration
 
+**For Current ESP32 Setup:**
+Create and edit `config/network_settings.ini`:
+```bash
+cp config/network_settings.ini.template config/network_settings.ini
+```
+
+Key settings for current hardware:
+```ini
+[printer]
+ip_address = "192.168.4.3"  # Printer endpoint  
+port = 6000                 # Anycubic communication port
+timeout = 10
+```
+
+**For Standard WiFi Networks:**
 ```ini
 [wifi]
 ssid = "YourWiFiNetwork"
 password = "YourPassword"
 enabled = true
 
-[access_point]
-ssid = "ScionMMU"
-password = "scionmmu123"
-enabled = false
-
 [printer]
-ip_address = ""  # Leave empty for auto-discovery
-port = 80
-timeout = 10
+ip_address = ""  # Auto-discovery
+port = 6000
 ```
 
 ### Pump Configuration
