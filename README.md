@@ -1,7 +1,5 @@
 # Scion Research Multi-Material 3D Printer Controller
 
-![Scion and Massey University Logos](./gui_mafdl/Picture1.png) ![Massey University Logo](./gui_mafdl/Picture2.png)
-
 This project is a hardware and software solution designed to enable multi-material resin 3D printing on an Anycubic Photon Mono X 6k printer. It was developed as a collaborative project between [Scion](https://www.scionresearch.com/) and the [Massey AgriFood Digital Lab](https://www.massey.ac.nz/about-massey/our-structure/college-of-sciences/school-of-food-and-advanced-technology/agrifood-digital-lab/).
 
 The system uses a single-board computer (like a Raspberry Pi) to act as an intermediary between the printer and a custom-built multi-material unit (MMU) consisting of stepper motor-driven pumps. It allows a user to define a print plan where different materials (resins) are automatically swapped at specific layer heights.
@@ -22,63 +20,9 @@ The system uses a single-board computer (like a Raspberry Pi) to act as an inter
 
 ## Capabilities
 
-*   **Network Flexibility:** The control unit can operate in two modes:
-    *   **Access Point (AP) Mode:** Creates its own Wi-Fi network, allowing direct connection to the printer without an existing network.
-    *   **Wi-Fi Client Mode:** Connects to an existing Wi-Fi network.
-*   **Full Printer Control:** The GUI provides standard printer controls, including listing files, starting a print, pausing, resuming, and stopping.
-*   **Manual Hardware Control:** Manually operate individual MMU pumps to prime, purge, or test materials.
-*   **Automated Multi-Material Printing:**
-    *   Define a "recipe" of which material to use at specific layer numbers.
-    *   Initiate a multi-material print process that automatically polls the printer's status.
-    *   Pauses the print at the designated layer, runs the pumps to swap materials, and resumes printing seamlessly.
-*   **Live Feedback:** A terminal-like output window in the GUI shows real-time status updates and command logs from the printer and control scripts.
+TBC
 
 ---
-
-## Project Structure
-
-*   `/`: Contains shell scripts for managing network modes (`startAP.sh`, `stopAP.sh`).
-*   `gui_mafdl/`: Source code for the main C++/Qt GUI application.
-*   `build-untitled6-LinuxKit-Release/`: The default build output directory for the compiled GUI application.
-*   `scripts/`: Contains all the core Python scripts for printer communication (`newmonox.py`, `pollphoton.py`) and hardware control (`photonmmu_pump.py`).
-*   `gui/`: Contains experimental/alternative GUI files (GTK, Tkinter).
-
----
-
-## Getting Started
-
-### Prerequisites
-
-*   A configured Raspberry Pi (or similar Linux SBC).
-*   Python 3 and required libraries (`RPi.GPIO`, `adafruit-circuitpython-motorkit`).
-*   Qt 5 development libraries.
-*   The custom-built MMU hardware connected to the Raspberry Pi's GPIO pins.
-
-### Build Instructions
-
-1.  Navigate to the release build directory:
-    ```bash
-    cd build-untitled6-LinuxKit-Release/
-    ```
-2.  Run qmake to generate the Makefile from the project file:
-    ```bash
-    qmake ../gui_mafdl/untitled6.pro
-    ```
-3.  Compile the project:
-    ```bash
-    make
-    ```
-4.  The executable `untitled6` will be created in the current directory.
-
-# Scion Multi-Material Unit Controller
-
-A sophisticated control system for multi-material 3D printing, enabling automated material changes during print jobs. This system coordinates between a 3D printer and a multi-material unit (MMU) to seamlessly switch between different resins or materials at specified layer heights.
-
-## 🎯 Vision: Simplified User Experience
-
-**Before:** Users had to manually coordinate multiple interfaces, edit configuration files, and run shell scripts.
-
-**After:** A single, intuitive GUI application that handles everything from network setup to print management.
 
 ## 🚀 Quick Start
 
@@ -154,27 +98,6 @@ scionresearch-multi-material-printer/
     ├── startAP.sh               # Enable WiFi access point mode
     └── stopAP.sh                # Disable access point, return to client mode
 ```
-
-## 🎮 User Workflow (Simplified)
-
-### The Old Way (Complex)
-1. SSH into Raspberry Pi
-2. Run shell scripts to configure network
-3. Edit configuration files manually
-4. Start GUI application
-5. Type cryptic recipe strings
-6. Start print job on printer physically
-7. Navigate file dialogs to select scripts
-8. Hope everything works together
-
-### The New Way (Simple)
-1. **Launch Application:** Open ScionMMUController
-2. **Connect:** Application auto-discovers printer on network
-3. **Select Print File:** Choose from files available on printer
-4. **Define Recipe:** Use visual table to set material changes by layer
-5. **Start Print:** Single button starts everything automatically
-6. **Monitor:** Real-time progress updates and status
-
 ## 🛠️ Configuration
 
 ### Network Setup
@@ -297,25 +220,6 @@ Run with debug output:
 
 See `TODO.md` for detailed development plans and known issues.
 
-### Immediate Goals (v1.1)
-- [ ] Integrated network manager in GUI
-- [ ] Visual recipe editor (table-based)
-- [ ] Auto-discovery of printers
-- [ ] Real-time status display
-
-### Future Goals (v2.0)
-- [ ] Multi-printer support
-- [ ] Web-based remote interface
-- [ ] Advanced material profiles
-- [ ] Predictive maintenance alerts
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ### Development Guidelines
 - Follow Qt coding standards for C++ code
@@ -323,17 +227,13 @@ See `TODO.md` for detailed development plans and known issues.
 - Update documentation for new features
 - Add tests for critical functionality
 
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
 ## 👥 Authors
 
-- **Scion Research** - Initial work and ongoing development
+- **Jean Henri Odendaal and Massey AgriFood Digital Lab (MAFDL)** - Initial work and design of the system and software
+- **Scion Research** - Ongoing development
 
 ## 🙏 Acknowledgments
+- Jean Henri Odendaal for the lead development of initial phases
+- Karl Molving for the modifications and ongoing improvement 
 
-- Anycubic community for printer communication protocols
-- Qt community for excellent GUI framework
-- Raspberry Pi Foundation for affordable computing platform
 
