@@ -1132,11 +1132,12 @@ void Dialog::optimizeForSmallScreen()
             ui->recipeTable->setMinimumHeight(50);
         }
         
-        // Make text browser much smaller - this is the main space hog
+        // Allow text browser to expand and fill the right side completely
         if (ui->textBrowser)
         {
-            ui->textBrowser->setMaximumHeight(80);
-            ui->textBrowser->setMinimumHeight(60);
+            ui->textBrowser->setMaximumHeight(16777215); // Remove height restriction
+            ui->textBrowser->setMinimumHeight(120);      // Ensure minimum usable height
+            ui->textBrowser->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         }
         
         // Reduce margins and spacing to minimum
@@ -1159,7 +1160,7 @@ void Dialog::optimizeForSmallScreen()
             "QLabel { font-size: 7pt; min-width: 85px; }"
             "QPushButton { font-size: 7pt; padding: 1px 3px; max-height: 20px; }"
             "QTableWidget { font-size: 6pt; }"
-            "QTextBrowser { font-size: 6pt; max-height: 80px; }"
+            "QTextBrowser { font-size: 6pt; }"
             "QListWidget { font-size: 6pt; }"
             "QVBoxLayout { spacing: 1px; }"
             "QHBoxLayout { spacing: 2px; }"
