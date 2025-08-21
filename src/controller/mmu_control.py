@@ -1,8 +1,21 @@
 """
-MMU Control Module - Multi-Material Unit hardware control
+MMU Control - Multi-Material Unit hardware control
 
-This module provides a clean interface for controlling pumps and material changes.
-Wraps the existing photonmmu_pump functionality with better error handling and configuration.
+Controls stepper motor-driven pumps via Adafruit motor controllers for automated
+material changes. Interfaces with I2C motor controllers to manage material reservoirs.
+
+Key Features:
+- Automated material change sequences (drain/fill/mix/settle)
+- Individual pump control with volume/timing precision
+- JSON-based pump configuration and calibration
+- Emergency stop and safety features
+
+Usage:
+    controller = MMUController()
+    controller.change_material('B')
+    controller.run_pump('pump_a', 'forward', 25)
+
+Requires: I2C enabled, Adafruit MotorKit, pump_profiles.json configuration
 """
 
 import json
@@ -18,19 +31,29 @@ except ImportError:
 
 
 class MMUController:
+    """
+    MMU hardware controller for stepper motor-driven pumps.
+    
+    Manages material change workflow: drain -> fill -> mix -> settle.
+    Controls pumps via Adafruit motor controllers over I2C.
+    
+    Attributes:
+        pump_config (dict): Pump profiles and calibration settings
+    """
+    
     def __init__(self, config_path=None):
         """Initialize MMU controller with pump configuration."""
         self.config_path = config_path or self._find_config_path()
         self.pump_config = self._load_pump_config()
         
     def _find_config_path(self):
-        """Find the pump configuration file."""
+        """Find pump configuration file path."""
         script_dir = Path(__file__).parent
         config_dir = script_dir.parent.parent / 'config'
         return config_dir / 'pump_profiles.json'
         
     def _load_pump_config(self):
-        """Load pump configuration from JSON file."""
+        """Load pump configuration from JSON file with defaults."""
         try:
             with open(self.config_path, 'r') as f:
                 config = json.load(f)
@@ -55,13 +78,13 @@ class MMUController:
     
     def change_material(self, target_material):
         """
-        Perform complete material change to target material.
+        Execute automated material change: drain -> fill -> mix -> settle.
         
         Args:
-            target_material (str): Target material identifier ('A', 'B', etc.)
+            target_material (str): Target material ('A', 'B', 'C', 'D')
             
         Returns:
-            bool: True if successful, False otherwise
+            bool: True if successful
         """
         try:
             print(f"Starting material change to: {target_material}")
@@ -102,15 +125,15 @@ class MMUController:
     
     def run_pump(self, pump_name, direction="forward", volume_ml=None):
         """
-        Run a specific pump.
+        Control individual pump with timing/volume precision.
         
         Args:
-            pump_name (str): Name of pump ('pump_a', 'pump_b', 'drain_pump')
-            direction (str): 'forward' or 'reverse'
-            volume_ml (float): Volume in ml to pump (optional)
+            pump_name (str): Pump name ('pump_a', 'pump_b', 'drain_pump')
+            direction (str): 'forward' or 'reverse' 
+            volume_ml (float, optional): Volume to pump (default: 10s timing)
             
         Returns:
-            bool: True if successful, False otherwise
+            bool: True if successful
         """
         try:
             # Get pump configuration
@@ -150,11 +173,11 @@ class MMUController:
     
     def calibrate_pump(self, pump_name, test_volume_ml=10):
         """
-        Run a calibration test for a specific pump.
+        Run calibration test for pump flow rate verification.
         
         Args:
-            pump_name (str): Name of pump to calibrate
-            test_volume_ml (float): Volume to dispense for calibration
+            pump_name (str): Pump to calibrate
+            test_volume_ml (float): Test volume (default: 10ml)
             
         Returns:
             bool: True if successful
@@ -167,7 +190,7 @@ class MMUController:
             return False
     
     def emergency_stop(self):
-        """Emergency stop all pumps."""
+        """Emergency stop all pump operations."""
         try:
             print("EMERGENCY STOP - Stopping all pumps")
             # Implementation would depend on your hardware setup
@@ -181,7 +204,7 @@ class MMUController:
 _mmu_controller = None
 
 def get_controller():
-    """Get the global MMU controller instance."""
+    """Get global MMUController instance (singleton pattern)."""
     global _mmu_controller
     if _mmu_controller is None:
         _mmu_controller = MMUController()
@@ -208,7 +231,15 @@ def run_pump_by_id(pump_id, direction, timing):
 
 
 if __name__ == "__main__":
-    """Test the MMU controller."""
+    """
+    Command-line interface for MMU pump testing.
+    
+    Usage: python mmu_control.py <motor_id> <direction> <timing>
+    
+    Examples:
+        python mmu_control.py A F 30  # Pump A forward 30 seconds
+        python mmu_control.py D R 15  # Drain pump reverse 15 seconds
+    """
     import sys
     
     if len(sys.argv) >= 4:

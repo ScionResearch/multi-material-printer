@@ -1,96 +1,135 @@
 """
-Printer Communications Module - Handle communication with 3D printer
+Printer Communications - Anycubic printer control via uart-wifi library
 
-This module provides a clean interface for communicating with the printer.
-Wraps the existing newmonox functionality with better error handling.
+Interface for Anycubic Mono X printers using uart-wifi library. Converts raw printer
+responses into structured data and handles network communication automatically.
+
+Key Features:
+- uart-wifi integration for structured printer responses
+- Configuration-based setup via INI files
+- Automatic connection recovery and error handling
+- Print control: pause/resume/stop operations
+- File management and status monitoring
+
+Usage:
+    comm = PrinterCommunicator()
+    status = comm.get_status()
+    comm.pause_print()
+    files = comm.get_files()
+
+Requires: uart-wifi>=0.2.1, network_settings.ini configuration
 """
 
-import subprocess
 import configparser
 from pathlib import Path
+import logging
 
-# Import the existing communication functions if available
+# Import uart-wifi library for printer communication
 try:
-    from .newmonox import *
+    from uart_wifi.communication import UartWifi
+    from uart_wifi.errors import ConnectionException, TimeoutException
+    UART_WIFI_AVAILABLE = True
 except ImportError:
-    # Fall back to subprocess calls if module import fails
-    pass
+    UART_WIFI_AVAILABLE = False
+    logging.warning("uart-wifi library not available. Install with: pip install uart-wifi>=0.2.1")
 
 
 class PrinterCommunicator:
+    """
+    Anycubic printer interface using uart-wifi library.
+    
+    Provides methods for status monitoring, print control, and file management.
+    Uses uart-wifi library for structured communication with Anycubic printers.
+    
+    Attributes:
+        printer_ip (str): Target printer IP address  
+        printer_port (int): Communication port (default: 6000)
+        timeout (int): Command timeout (default: 10)
+    """
+    
     def __init__(self, config_path=None):
-        """Initialize printer communicator with configuration."""
+        """
+        Initialize printer communicator with configuration.
+        
+        Args:
+            config_path (str, optional): Path to config file (default: auto-detect)
+        """
         self.config_path = config_path or self._find_config_path()
         self.config = self._load_config()
         self.printer_ip = self.config.get('printer', 'ip_address', fallback='192.168.4.2')
-        self.printer_port = self.config.getint('printer', 'port', fallback=80)
+        self.printer_port = self.config.getint('printer', 'port', fallback=6000)
         self.timeout = self.config.getint('printer', 'timeout', fallback=10)
+        self._uart_wifi = None
         
     def _find_config_path(self):
-        """Find the configuration file."""
+        """Find network configuration file path."""
         script_dir = Path(__file__).parent
         config_dir = script_dir.parent.parent / 'config'
         return config_dir / 'network_settings.ini'
         
     def _load_config(self):
-        """Load configuration from INI file."""
+        """Load configuration from INI file with fallback defaults."""
         config = configparser.ConfigParser()
         try:
             config.read(self.config_path)
         except Exception as e:
             print(f"Warning: Could not load config: {e}")
         return config
+    
+    def _get_uart_connection(self):
+        """Get or create uart-wifi connection instance."""
+        if not UART_WIFI_AVAILABLE:
+            raise Exception("uart-wifi library not available. Install with: pip install uart-wifi>=0.2.1")
+        
+        if self._uart_wifi is None:
+            self._uart_wifi = UartWifi(self.printer_ip, self.printer_port)
+        return self._uart_wifi
         
     def _run_printer_command(self, command):
         """
-        Run a printer command using the newmonox script.
+        Execute printer command via uart-wifi library.
         
         Args:
-            command (str): Command to send to printer
+            command (str): Command to send ('getstatus', 'gopause', etc.)
             
         Returns:
-            str: Response from printer, or None if error
+            str: Response data or None if error
         """
         try:
-            script_path = Path(__file__).parent / 'newmonox.py'
-            cmd = [
-                'python3', str(script_path),
-                '-i', self.printer_ip,
-                '-c', command
-            ]
+            uart = self._get_uart_connection()
+            response = uart.send_request(command, timeout=self.timeout)
             
-            result = subprocess.run(
-                cmd, 
-                capture_output=True, 
-                text=True, 
-                timeout=self.timeout
-            )
-            
-            if result.returncode == 0:
-                return result.stdout.strip()
+            if response and hasattr(response, 'data'):
+                return response.data.strip()
+            elif response:
+                return str(response).strip()
             else:
-                print(f"Printer command failed: {result.stderr}")
                 return None
                 
-        except subprocess.TimeoutExpired:
+        except ConnectionException as e:
+            print(f"Printer connection failed: {e}")
+            self._uart_wifi = None  # Reset connection for retry
+            return None
+        except TimeoutException as e:
             print(f"Printer command timed out: {command}")
             return None
         except Exception as e:
             print(f"Error running printer command: {e}")
+            self._uart_wifi = None  # Reset connection for retry
             return None
     
     def get_status(self):
         """
-        Get printer status.
+        Get current printer status via uart-wifi.
         
         Returns:
-            str: Status response from printer
+            str: Status response with state, layer, progress info
         """
         return self._run_printer_command('getstatus')
     
     def pause_print(self):
         """
-        Pause the current print job.
+        Pause current print job.
         
         Returns:
             bool: True if successful
@@ -100,7 +139,7 @@ class PrinterCommunicator:
     
     def resume_print(self):
         """
-        Resume the current print job.
+        Resume paused print job.
         
         Returns:
             bool: True if successful
@@ -110,7 +149,7 @@ class PrinterCommunicator:
     
     def stop_print(self):
         """
-        Stop the current print job.
+        Stop current print job permanently.
         
         Returns:
             bool: True if successful
@@ -120,10 +159,10 @@ class PrinterCommunicator:
     
     def get_files(self):
         """
-        Get list of files on printer.
+        Get list of printable files on printer.
         
         Returns:
-            list: List of file names, or empty list if error
+            list: Available filenames or empty list if error
         """
         response = self._run_printer_command('getfiles')
         if response:
@@ -132,10 +171,10 @@ class PrinterCommunicator:
     
     def start_print(self, filename):
         """
-        Start printing a specific file.
+        Start printing specified file.
         
         Args:
-            filename (str): Name of file to print
+            filename (str): File to print (use internal name from get_files)
             
         Returns:
             bool: True if successful
@@ -146,19 +185,19 @@ class PrinterCommunicator:
     
     def get_mode(self):
         """
-        Get printer mode.
+        Get printer operating mode.
         
         Returns:
-            str: Printer mode response
+            str: Mode response or None if error
         """
         return self._run_printer_command('getmode')
     
     def is_connected(self):
         """
-        Check if printer is connected and responding.
+        Test printer connectivity.
         
         Returns:
-            bool: True if connected
+            bool: True if printer responds
         """
         status = self.get_status()
         return status is not None and len(status) > 0
@@ -168,7 +207,7 @@ class PrinterCommunicator:
 _printer_comm = None
 
 def get_communicator():
-    """Get the global printer communicator instance."""
+    """Get global PrinterCommunicator instance (singleton pattern)."""
     global _printer_comm
     if _printer_comm is None:
         _printer_comm = PrinterCommunicator()
@@ -219,7 +258,13 @@ def start_print(filename, printer_ip=None):
 
 
 if __name__ == "__main__":
-    """Test the printer communicator."""
+    """
+    Command-line interface for printer communication testing.
+    
+    Usage: python printer_comms.py -i <printer_ip> -c <command>
+    
+    Commands: getstatus, gopause, goresume, gostop,end, getfile, getmode
+    """
     import sys
     
     if len(sys.argv) >= 3:

@@ -1,10 +1,21 @@
 """
-Print Manager Module - Main orchestration for multi-material printing
+Print Manager - Automated multi-material printing orchestration
 
-This module handles the coordination between printer communication and 
-material changes during a print job.
+Central coordinator for multi-material printing operations. Monitors printer status
+via uart-wifi library and triggers material changes at specified layers.
 
-Refactored from pollphoton.py to be more modular and configurable.
+Key Features:
+- Real-time printer monitoring and layer detection
+- Recipe-based material changes (format: "A,50:B,120:C,200")  
+- Coordinated pause/resume operations during material swaps
+- Integration with printer_comms and mmu_control modules
+
+Usage:
+    manager = PrintManager()
+    manager.load_recipe('recipe.txt')
+    manager.start_monitoring()
+
+Requires: printer_comms (uart-wifi), mmu_control, configuration files
 """
 
 import socket
@@ -26,8 +37,19 @@ except ImportError:
     import printer_comms
 
 class PrintManager:
+    """
+    Automated multi-material printing coordinator.
+    
+    Monitors printer progress via uart-wifi and triggers material changes at 
+    specified layers. Integrates with printer_comms and mmu_control modules.
+    
+    Attributes:
+        printer_ip (str): Target printer IP
+        recipe (dict): Layer->material mapping
+    """
+    
     def __init__(self, config_path=None):
-        """Initialize the print manager with configuration."""
+        """Initialize print manager with configuration."""
         self.config_path = config_path or self._find_config_path()
         self.config = self._load_config()
         self.printer_ip = self.config.get('printer', 'ip_address', fallback='192.168.4.2')
@@ -38,7 +60,7 @@ class PrintManager:
         self.recipe = {}
         
     def _find_config_path(self):
-        """Find the configuration file relative to this script."""
+        """Find configuration file path."""
         script_dir = Path(__file__).parent
         config_dir = script_dir.parent.parent / 'config'
         return config_dir / 'network_settings.ini'
@@ -55,7 +77,17 @@ class PrintManager:
         return config
     
     def load_recipe(self, recipe_path):
-        """Load material change recipe from file."""
+        """
+        Load material change recipe from file.
+        
+        Args:
+            recipe_path (str): Path to recipe file
+            
+        Returns:
+            bool: True if successful
+            
+        Format: "A,50:B,120:C,200" (material,layer pairs)
+        """
         try:
             with open(recipe_path, 'r') as f:
                 recipe_text = f.read().strip()
@@ -76,7 +108,14 @@ class PrintManager:
             return False
     
     def start_monitoring(self, recipe_path=None):
-        """Start monitoring the printer and handling material changes."""
+        """
+        Start automated printer monitoring and material changes.
+        
+        Args:
+            recipe_path (str, optional): Recipe file to load
+            
+        Polls printer every 5 seconds, triggers material changes at target layers.
+        """
         if recipe_path and not self.load_recipe(recipe_path):
             print("Failed to load recipe, aborting.")
             return False
@@ -129,7 +168,7 @@ class PrintManager:
             print(f"Error during monitoring: {e}")
             
     def _get_printer_status(self):
-        """Get current printer status."""
+        """Get current printer status via uart-wifi."""
         try:
             # Use the printer_comms module
             return printer_comms.get_status(self.printer_ip)
@@ -138,7 +177,15 @@ class PrintManager:
             return None
             
     def _extract_current_layer(self, status):
-        """Extract current layer number from status response."""
+        """
+        Extract current layer from status response.
+        
+        Args:
+            status (str): Status response
+            
+        Returns:
+            int: Layer number or None if parsing fails
+        """
         try:
             # This needs to be implemented based on your printer's response format
             # For now, return a placeholder
@@ -152,7 +199,15 @@ class PrintManager:
             return None
             
     def _handle_material_change(self, material):
-        """Handle material change process."""
+        """
+        Execute material change: pause -> change -> resume.
+        
+        Args:
+            material (str): Target material (A, B, C, D)
+            
+        Returns:
+            bool: True if successful
+        """
         try:
             print(f"Starting material change to: {material}")
             
@@ -175,7 +230,7 @@ class PrintManager:
             return False
             
     def _pause_printer(self):
-        """Pause the printer."""
+        """Pause printer via uart-wifi."""
         try:
             return printer_comms.pause_print(self.printer_ip)
         except Exception as e:
@@ -183,7 +238,7 @@ class PrintManager:
             return False
             
     def _resume_printer(self):
-        """Resume the printer."""
+        """Resume printer via uart-wifi."""
         try:
             return printer_comms.resume_print(self.printer_ip)
         except Exception as e:
@@ -191,13 +246,19 @@ class PrintManager:
             return False
             
     def _is_print_complete(self, status):
-        """Check if print is complete."""
+        """Check if print is complete based on status.""\
         # Implementation depends on your printer's status format
         return "complete" in status.lower() if status else False
 
 
 def main():
-    """Main entry point when script is run directly."""
+    """
+    Command-line interface for automated multi-material printing.
+    
+    Usage: python print_manager.py [-r recipe.txt] [-c config.ini] [-i printer_ip]
+    
+    Monitors printer via uart-wifi and triggers material changes at specified layers.
+    """
     parser = argparse.ArgumentParser(description='Multi-Material Print Manager')
     parser.add_argument('--recipe', '-r', help='Path to recipe file')
     parser.add_argument('--config', '-c', help='Path to config file')

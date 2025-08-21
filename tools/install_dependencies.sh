@@ -30,19 +30,21 @@ sudo apt install -y python3 python3-pip python3-venv
 echo "Installing networking tools..."
 sudo apt install -y hostapd dnsmasq
 
-# Install GPIO libraries (for Raspberry Pi)
-echo "Installing GPIO libraries..."
-pip3 install RPi.GPIO gpiozero
+# Install all Python packages from requirements.txt
+echo "Installing all required Python packages..."
+pip3 install --upgrade pip
 
-# Install other Python packages
-echo "Installing Python packages..."
-pip3 install requests configparser
+# Navigate to project root to find requirements.txt
+cd "$(dirname "$0")/.."
 
-# Create Python virtual environment (optional but recommended)
-echo "Creating Python virtual environment..."
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt 2>/dev/null || echo "requirements.txt not found, skipping..."
+# Install from requirements.txt
+if [ -f "requirements.txt" ]; then
+    pip3 install -r requirements.txt
+    echo "Python dependencies installed successfully from requirements.txt"
+else
+    echo "Error: requirements.txt not found!"
+    exit 1
+fi
 
 # Set up configuration files
 echo "Setting up configuration files..."

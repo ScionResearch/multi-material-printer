@@ -52,17 +52,27 @@ The system uses a single-board computer (like a Raspberry Pi) to act as an inter
    cd multi-material-printer
    ```
 
-2. **Run the installation script:**
+2. **Enable Hardware Interfaces (First-Time Raspberry Pi Setup):**
+   ```bash
+   sudo raspi-config
+   ```
+   - Go to: `3 Interface Options` → `I5 I2C`
+   - Select `<Yes>` to enable the I2C interface
+   - Reboot when prompted: `sudo reboot`
+   
+   **⚠️ Critical:** The Adafruit motor controllers will fail if the I2C interface is not enabled.
+
+3. **Run the installation script:**
    ```bash
    chmod +x tools/install_dependencies.sh
    sudo ./tools/install_dependencies.sh
    ```
 
-3. **Configure your setup:**
+4. **Configure your setup:**
    - Edit `config/network_settings.ini` for your network
    - Edit `config/pump_profiles.json` for your hardware setup
 
-4. **Build and run:**
+5. **Build and run:**
    ```bash
    cd src/gui
    qmake ScionMMUController.pro
