@@ -7,8 +7,9 @@ This document outlines the current development status and remaining tasks for th
 ## Project Status Overview
 
 ✅ **Foundation Complete** - Project restructuring, configuration management, and core architecture are implemented  
-🔧 **Active Development** - GUI enhancements and user workflow improvements  
-📋 **Future Features** - Advanced functionality and optimization  
+✅ **GUI Enhancements Complete** - Advanced user interface with real-time monitoring and streamlined workflows  
+🔧 **Active Development** - Network management, hardware control, and safety features  
+📋 **Future Features** - Smart features, analytics, and remote monitoring  
 
 ---
 
@@ -39,46 +40,106 @@ This document outlines the current development status and remaining tasks for th
 
 ---
 
-## 🔧 HIGH PRIORITY - Current Development Focus
+## ✅ COMPLETED WORK (Phase 2 - GUI Enhancements)
 
 ### GUI Workflow Improvements
-- [ ] **Visual Recipe Editor** - Replace text input with table-based material change editor
-  - Table widget with "Layer Number" and "Material" columns
-  - Add/Remove row buttons for recipe management
-  - Material dropdown selection (Pump A, B, C, D)
-  - Automatic recipe file generation
+- ✅ **Visual Recipe Editor** - Replace text input with table-based material change editor
+  - ✅ Table widget with "Layer Number" and "Material" columns
+  - ✅ Add/Remove row buttons for recipe management
+  - ✅ Material dropdown selection (Pump A, B, C, D)
+  - ✅ Automatic recipe file generation
+  - ✅ Load/Save recipe functionality with file dialogs
 
-- [ ] **Dynamic Printer Status Display** - Real-time status monitoring
-  - Live status updates (Printing/Paused/Idle)
-  - Current file and progress display
-  - Next material change information
-  - Connection status indicator
+- ✅ **Dynamic Printer Status Display** - Real-time status monitoring
+  - ✅ Live status updates (Printing/Paused/Idle/Unknown) with color coding
+  - ✅ Current file and progress display with progress bar
+  - ✅ Next material change information
+  - ✅ Connection status indicator with visual feedback
+  - ✅ Auto-update toggle with 5-second intervals
 
-- [ ] **Streamlined Print Management** - Single-button print workflow
-  - "Start Multi-Material Print" button
-  - Automatic pre-print validation
-  - Integrated file selection and recipe confirmation
+- ✅ **Streamlined Print Management** - Single-button print workflow
+  - ✅ "🚀 Start Multi-Material Print" button with enhanced styling
+  - ✅ Comprehensive pre-print validation (recipe, connection, printer state)
+  - ✅ Integrated file selection and recipe confirmation
+  - ✅ Automatic recipe saving before print start
+  - ✅ Detailed confirmation dialog with print summary
 
 ### System Reliability
-- [ ] **Asynchronous Operations** - Prevent GUI freezing
-  - Implement QProcess signals for script execution  
-  - Move long operations to QThread
-  - Progress indicators for all operations
+- ✅ **Asynchronous Operations** - Prevent GUI freezing
+  - ✅ Implemented ScriptWorker class running in separate QThread
+  - ✅ Refactored all printer commands to use async operations
+  - ✅ Non-blocking status checks with proper signal/slot connections
+  - ✅ Process timeout handling (10-second timeouts)
 
-- [ ] **Robust Error Handling** - Connection and hardware failure recovery
-  - Printer connectivity validation
-  - Pump failure detection and alerts
-  - Network interruption handling
-  - Clear error messaging to users
+- ✅ **Robust Error Handling** - Connection and hardware failure recovery
+  - ✅ Consecutive failure tracking (connection lost after 3 failures)
+  - ✅ Hardware error analysis (pump, motor, sensor failures)
+  - ✅ User-friendly error dialogs with actionable guidance
+  - ✅ Automatic operation stopping on hardware errors
+  - ✅ Network connectivity validation and recovery suggestions
 
-- [ ] **Memory Management** - Qt object lifecycle fixes
-  - Investigate potential memory leaks
-  - Ensure proper cleanup on dialog destruction
-  - Thread safety for GUI updates
+- ✅ **Memory Management** - Qt object lifecycle fixes
+  - ✅ Proper QProcess cleanup with terminate/kill fallbacks
+  - ✅ Thread-safe worker cleanup using deleteLater()
+  - ✅ Custom table widget cleanup (QSpinBox/QComboBox)
+  - ✅ Timer management and proper parent-child relationships
+  - ✅ Memory leak prevention in process handling
 
 ---
 
-## 📋 MEDIUM PRIORITY - Feature Enhancements
+## 🚨 CRITICAL PRIORITY - Installation & Infrastructure Fixes
+
+**URGENT:** These issues must be resolved before the project can be successfully installed on a fresh Raspberry Pi system.
+
+### Missing Dependencies & Installation Issues
+- [ ] **Integrate the `anycubic-python` Dependency**
+  - ⚠️ **Critical Issue:** Core communication scripts depend on the `uart_wifi` library from `anycubic-python` repository
+  - Scripts like `newcommunication.py` import `from uart_wifi.errors import ConnectionException` but the dependency is missing
+  - **Action:** Add to `requirements.txt`:
+    ```
+    # Anycubic printer communication library
+    anycubic-python @ git+https://github.com/adamoutler/anycubic-python.git
+    ```
+  - **Sub-Task:** Verify and fix Python imports in `src/controller/newcommunication.py`
+  - **Sub-Task:** Test imports may need to change from relative to absolute paths
+
+- [ ] **Strengthen Installation Script (`tools/install_dependencies.sh`)**
+  - **Problem:** Current script doesn't reliably install all Python packages from `requirements.txt`
+  - **Action:** Replace Python installation section with robust command:
+    ```bash
+    echo "Installing all required Python packages..."
+    pip3 install -r requirements.txt
+    echo "Python dependencies installed successfully."
+    ```
+  - **Sub-Task:** Ensure `adafruit-circuitpython-motorkit` and `anycubic-python` install correctly
+
+- [ ] **Document Required Hardware Configuration (I2C)**
+  - **Critical:** Adafruit motor controllers require I2C interface (disabled by default on new Pi)
+  - **Action:** Add mandatory setup step to README.md:
+    ```markdown
+    ### 1a. Enable Hardware Interfaces (First-Time Raspberry Pi Setup)
+    
+    **This step is critical for the pumps to function.**
+    
+    1. Run: `sudo raspi-config`
+    2. Select `3 Interface Options`
+    3. Select `I5 I2C`
+    4. Select `<Yes>` to enable ARM I2C interface
+    5. Reboot when prompted
+    ```
+
+### Legacy Code Management
+- [ ] **Archive Legacy Python Scripts**
+  - **Problem:** Old scripts in `src/controller/` cause confusion and import conflicts
+  - **Action:** Move to `archive/controller_legacy/`:
+    - `newmonox.py` (replaced by modular approach)
+    - `pollphoton.py` (functionality integrated into GUI)
+    - `guitest.py` (development artifact)
+    - Consider archiving `newcommunication.py` if using `anycubic-python` directly
+
+---
+
+## 🔧 HIGH PRIORITY - Next Development Focus
 
 ### Network & Discovery
 - [ ] **Integrated Network Manager** - GUI-based WiFi management
@@ -141,16 +202,23 @@ This document outlines the current development status and remaining tasks for th
 
 ## 📊 Development Priorities
 
-### Immediate (Next 4-6 weeks)
-1. Visual Recipe Editor implementation
-2. Dynamic Printer Status Display  
-3. Asynchronous operation refactoring
-4. Basic error handling improvements
+### CRITICAL (Immediate - Next 1-2 weeks)
+1. 🚨 **Fix missing `anycubic-python` dependency** - Project currently cannot install on fresh Pi
+2. 🚨 **Strengthen installation script** - Ensure reliable dependency installation  
+3. 🚨 **Document I2C hardware setup** - Critical for pump functionality
+4. 🚨 **Archive legacy scripts** - Remove import conflicts and confusion
 
-### Short Term (2-3 months)
+### Recently Completed (Phase 2 - GUI Enhancements)
+1. ✅ Visual Recipe Editor implementation
+2. ✅ Dynamic Printer Status Display  
+3. ✅ Asynchronous operation refactoring
+4. ✅ Comprehensive error handling improvements
+5. ✅ Memory management and Qt lifecycle fixes
+
+### Short Term (After Critical Fixes - 1-2 months)
 1. Network management integration
 2. Pump calibration system
-3. Pre-print validation
+3. Pre-print validation enhancements
 4. Safety feature implementation
 
 ### Long Term (6+ months)

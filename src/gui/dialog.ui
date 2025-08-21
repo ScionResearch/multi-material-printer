@@ -40,45 +40,181 @@
            <item>
             <widget class="QLabel" name="label_2">
              <property name="text">
-              <string>Enter Line with Material and Line Number:</string>
+              <string>Material Recipe Editor:</string>
              </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QTableWidget" name="recipeTable">
+             <property name="alternatingRowColors">
+              <bool>true</bool>
+             </property>
+             <property name="selectionBehavior">
+              <enum>QAbstractItemView::SelectRows</enum>
+             </property>
+             <property name="sortingEnabled">
+              <bool>false</bool>
+             </property>
+             <column>
+              <property name="text">
+               <string>Layer Number</string>
+              </property>
+             </column>
+             <column>
+              <property name="text">
+               <string>Material Pump</string>
+              </property>
+             </column>
             </widget>
            </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_7">
              <item>
-              <widget class="QLineEdit" name="lineEdit">
-               <property name="placeholderText">
-                <string>e.g., A,1:B,2</string>
+              <widget class="QPushButton" name="addRecipeRow">
+               <property name="text">
+                <string>Add Row</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="removeRecipeRow">
+               <property name="text">
+                <string>Remove Selected</string>
                </property>
               </widget>
              </item>
              <item>
               <widget class="QPushButton" name="submitline">
                <property name="text">
-                <string>Set</string>
+                <string>Save Recipe</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QPushButton" name="loadRecipe">
+               <property name="text">
+                <string>Load Recipe</string>
                </property>
               </widget>
              </item>
             </layout>
            </item>
            <item>
-            <layout class="QHBoxLayout" name="horizontalLayout_3">
-             <item>
-              <widget class="QPushButton" name="checkstatus">
-               <property name="text">
-                <string>Check Status</string>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="statusLabel">
-               <property name="text">
-                <string>Disconnected...</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
+            <widget class="QGroupBox" name="statusGroupBox">
+             <property name="title">
+              <string>Printer Status</string>
+             </property>
+             <layout class="QVBoxLayout" name="statusVerticalLayout">
+              <item>
+               <layout class="QHBoxLayout" name="statusControlLayout">
+                <item>
+                 <widget class="QPushButton" name="checkstatus">
+                  <property name="text">
+                   <string>Check Status</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <widget class="QPushButton" name="toggleAutoUpdate">
+                  <property name="text">
+                   <string>Auto Update: OFF</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
+                 <spacer name="statusSpacer">
+                  <property name="orientation">
+                   <enum>Qt::Horizontal</enum>
+                  </property>
+                  <property name="sizeHint" stdset="0">
+                   <size>
+                    <width>40</width>
+                    <height>20</height>
+                   </size>
+                  </property>
+                 </spacer>
+                </item>
+               </layout>
+              </item>
+              <item>
+               <layout class="QGridLayout" name="statusInfoLayout">
+                <item row="0" column="0">
+                 <widget class="QLabel" name="connectionStatusLabel">
+                  <property name="text">
+                   <string>Connection:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="0" column="1">
+                 <widget class="QLabel" name="connectionStatusValue">
+                  <property name="text">
+                   <string>Disconnected</string>
+                  </property>
+                  <property name="styleSheet">
+                   <string>color: red;</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="0">
+                 <widget class="QLabel" name="printerStateLabel">
+                  <property name="text">
+                   <string>Printer State:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="1" column="1">
+                 <widget class="QLabel" name="printerStateValue">
+                  <property name="text">
+                   <string>Unknown</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="0">
+                 <widget class="QLabel" name="currentFileLabel">
+                  <property name="text">
+                   <string>Current File:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="2" column="1">
+                 <widget class="QLabel" name="currentFileValue">
+                  <property name="text">
+                   <string>None</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="0">
+                 <widget class="QLabel" name="progressLabel">
+                  <property name="text">
+                   <string>Progress:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="3" column="1">
+                 <widget class="QProgressBar" name="printProgressBar">
+                  <property name="value">
+                   <number>0</number>
+                  </property>
+                 </widget>
+                </item>
+                <item row="4" column="0">
+                 <widget class="QLabel" name="nextMaterialLabel">
+                  <property name="text">
+                   <string>Next Material:</string>
+                  </property>
+                 </widget>
+                </item>
+                <item row="4" column="1">
+                 <widget class="QLabel" name="nextMaterialValue">
+                  <property name="text">
+                   <string>N/A</string>
+                  </property>
+                 </widget>
+                </item>
+               </layout>
+              </item>
+             </layout>
+            </widget>
            </item>
           </layout>
          </item>
@@ -170,43 +306,87 @@
         </layout>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_4">
-         <item>
-          <widget class="QPushButton" name="startPr">
-           <property name="text">
-            <string>Begin MM</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="stopMM">
-           <property name="text">
-            <string>Stop MM</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="pausePr">
-           <property name="text">
-            <string>Pause Printer</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="stopPr">
-           <property name="text">
-            <string>Stop Printer</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QPushButton" name="resumePr">
-           <property name="text">
-            <string>Resume Printer</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
+        <widget class="QGroupBox" name="printControlGroupBox">
+         <property name="title">
+          <string>Print Management</string>
+         </property>
+         <layout class="QVBoxLayout" name="printControlLayout">
+          <item>
+           <widget class="QPushButton" name="startMultiMaterialPrint">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>50</height>
+             </size>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>12</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>🚀 Start Multi-Material Print</string>
+            </property>
+            <property name="styleSheet">
+             <string>QPushButton {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+}
+QPushButton:hover {
+    background-color: #45a049;
+}
+QPushButton:pressed {
+    background-color: #3d8b40;
+}</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="printControlButtons">
+            <item>
+             <widget class="QPushButton" name="startPr">
+              <property name="text">
+               <string>Begin MM</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="stopMM">
+              <property name="text">
+               <string>Stop MM</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="pausePr">
+              <property name="text">
+               <string>Pause Printer</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="stopPr">
+              <property name="text">
+               <string>Stop Printer</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QPushButton" name="resumePr">
+              <property name="text">
+               <string>Resume Printer</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
        </item>
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_5"/>

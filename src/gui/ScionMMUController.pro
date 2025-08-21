@@ -36,11 +36,13 @@ CONFIG += c++11
 SOURCES += \
         main.cpp \
         dialog.cpp \
-        configmanager.cpp
+        configmanager.cpp \
+        scriptworker.cpp
 
 HEADERS += \
         dialog.h \
-        configmanager.h
+        configmanager.h \
+        scriptworker.h
 
 FORMS += \
         dialog.ui

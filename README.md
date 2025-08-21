@@ -21,10 +21,16 @@ The system uses a single-board computer (like a Raspberry Pi) to act as an inter
 ## Capabilities
 
 ### System Features
+- **Advanced GUI Interface:** Modern Qt-based interface with real-time status monitoring and streamlined workflows
+- **Visual Recipe Editor:** Table-based material recipe editor with drag-and-drop functionality and material dropdown selection
+- **Real-Time Status Display:** Live printer status with connection indicators, progress bars, and next material change information
+- **One-Click Print Management:** Single "🚀 Start Multi-Material Print" button with integrated validation and confirmation
+- **Asynchronous Operations:** Non-blocking GUI with background process management for responsive user experience
+- **Robust Error Handling:** Comprehensive error detection with automatic recovery suggestions and hardware failure alerts
 - **Network Management:** Switch between Access Point mode (creates own WiFi) and client mode (connects to existing WiFi)
 - **File Management:** List and select printable files stored on the printer's internal memory
 - **Standard Print Operations:** Start, pause, resume, and stop prints directly from the interface
-- **Multi-Material Recipe System:** Define sequences of material changes based on specific layer numbers
+- **Multi-Material Recipe System:** Define sequences of material changes based on specific layer numbers with visual feedback
 - **Automated Print Execution:** The system automatically executes multi-material recipes by:
   1. Continuously polling the printer for its current layer number
   2. Pausing the print job when a target layer is reached
@@ -111,14 +117,22 @@ Network topology:
    - Status should show "Connected..." if printer is reachable
 
 3. **Setup Multi-Material Print:**
-   - Define material recipe in format: `MATERIAL,LAYER:MATERIAL,LAYER`
-   - Example: `A,50:B,120:C,200` (switch to A at layer 50, B at 120, C at 200)
-   - Click **"Set"** to save recipe
+   - Use the **Visual Recipe Editor** table to define material changes:
+     - Click **"Add Row"** to add material change points
+     - Set layer numbers using the spin boxes
+     - Select materials (A, B, C, D) from dropdown menus
+     - Click **"Save Recipe"** to save your configuration
+     - Use **"Load Recipe"** to load previously saved recipes
 
 4. **Start Multi-Material Print:**
-   - Start print job on printer (or use "Get Files" to select from GUI)
-   - Click **"Begin MM"** to start automated material swapping
-   - System monitors layers and performs swaps automatically
+   - Click the prominent **"🚀 Start Multi-Material Print"** button
+   - The system will automatically:
+     - Validate your recipe and printer connection
+     - Display a confirmation dialog with print details
+     - Prompt for print file selection
+     - Save the recipe and start monitoring
+   - Monitor real-time status in the enhanced status panel
+   - Use **"Auto Update: ON"** for continuous status monitoring
 
 ### Manual Controls
 
@@ -151,9 +165,10 @@ multi-material-printer/
 ├── src/                         # Source code
 │   ├── gui/                     # Qt C++ GUI application
 │   │   ├── main.cpp             # Application entry point
-│   │   ├── dialog.cpp/.h        # Main dialog window
+│   │   ├── dialog.cpp/.h        # Main dialog window with enhanced UI
+│   │   ├── scriptworker.cpp/.h  # Asynchronous script execution worker
 │   │   ├── configmanager.cpp/.h # Configuration management
-│   │   ├── dialog.ui            # UI layout file
+│   │   ├── dialog.ui            # Enhanced UI layout file
 │   │   ├── ScionMMUController.pro # Qt project file
 │   │   ├── assets.qrc           # Qt resource file
 │   │   └── assets/              # Images and UI resources
