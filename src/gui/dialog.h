@@ -93,6 +93,7 @@ private:
      void onPrintFileclicked(QListWidgetItem *item);
      void checkConnectionStatus();
      void setupRecipeTable();
+     void reorganizeLayout();
      void setupTooltips();
      void setupKeyboardShortcuts();
      void setupClearOutputButton();

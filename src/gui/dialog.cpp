@@ -38,6 +38,7 @@ Dialog::Dialog(QWidget *parent)
     optimizeForSmallScreen();
     
     setupRecipeTable();
+    reorganizeLayout(); // Reorganize UI layout for better space usage
     setupTooltips();
     setupKeyboardShortcuts();
     setupClearOutputButton();
@@ -568,6 +569,36 @@ void Dialog::setupRecipeTable()
     
     // Add an initial row
     addRecipeTableRow(1, "A");
+}
+
+void Dialog::reorganizeLayout()
+{
+    // Make the recipe table much larger to be the main focus
+    ui->recipeTable->setMinimumSize(500, 450);
+    ui->recipeTable->setMaximumSize(16777215, 16777215); // Allow unlimited expansion
+    
+    // Set size policies to make recipe table expandable and take most of the space
+    ui->recipeTable->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    
+    // Find the status group box and give it a smaller fixed height to make more room for recipe table
+    if (ui->statusGroupBox) {
+        ui->statusGroupBox->setMaximumHeight(150);
+        ui->statusGroupBox->setMinimumHeight(150);
+        ui->statusGroupBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    }
+    
+    // Find the print control group box and limit its height too to be more compact
+    if (ui->printControlGroupBox) {
+        ui->printControlGroupBox->setMaximumHeight(100);
+        ui->printControlGroupBox->setMinimumHeight(100);
+        ui->printControlGroupBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    }
+    
+    // Make the recipe table area expand to fill most of the left side
+    QWidget* recipeWidget = ui->recipeTable->parentWidget();
+    if (recipeWidget) {
+        recipeWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    }
 }
 
 void Dialog::addRecipeTableRow(int layerNum, const QString &material)
