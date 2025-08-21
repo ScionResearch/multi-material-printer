@@ -311,7 +311,7 @@ See `TODO.md` for detailed development plans and known issues.
 
 ## 👥 Authors
 
-- **Jean Henri Odendaal and Massey AgriFood Digital Lab (MAFDL)** - Initial work and design of the system and software
+- **Massey AgriFood Digital Lab (MAFDL)** - Initial work and design of the system and software
 - **Scion Research** - Ongoing development
 
 ## 🙏 Acknowledgments
