@@ -22,6 +22,10 @@
 #include <QSet>
 #include <QApplication>
 #include <QScreen>
+#include <QShortcut>
+#include <QMessageBox>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
 #include "scriptworker.h"
 
 Dialog::Dialog(QWidget *parent)
@@ -34,6 +38,9 @@ Dialog::Dialog(QWidget *parent)
     optimizeForSmallScreen();
     
     setupRecipeTable();
+    setupTooltips();
+    setupKeyboardShortcuts();
+    setupClearOutputButton();
     
     // Initialize status update timer
     statusUpdateTimer = new QTimer(this);
@@ -52,6 +59,10 @@ Dialog::Dialog(QWidget *parent)
     connect(scriptWorker, &ScriptWorker::operationStarted, this, &Dialog::handleOperationStarted);
     connect(scriptWorker, &ScriptWorker::connectionLost, this, &Dialog::handleConnectionLost);
     connect(scriptWorker, &ScriptWorker::hardwareError, this, &Dialog::handleHardwareError);
+    
+    // Connect button state management to operation events
+    connect(scriptWorker, &ScriptWorker::operationStarted, this, [this]() { setButtonStates(false); });
+    connect(scriptWorker, &ScriptWorker::scriptFinished, this, [this]() { setButtonStates(true); });
     
     // Start the worker thread
     workerThread->start();
@@ -310,8 +321,14 @@ void Dialog::on_manualrun_clicked()
     QString functionName = "run_stepper";
 
     // Set the input text from the line edit
-    QString inputText = ui->motor_settings->text();
-    ui->textBrowser->append(inputText);
+    QString inputText = ui->motor_settings->text().trimmed();
+    
+    // Validate input format before processing
+    if (!validateMotorControlInput(inputText)) {
+        return; // Error message already shown in validation function
+    }
+    
+    ui->textBrowser->append("Motor command: " + inputText);
 
     // Split the input using a comma as the delimiter
     QStringList inputValues = inputText.split(",");
@@ -1153,10 +1170,10 @@ void Dialog::optimizeForSmallScreen()
             ui->filesWidget->setMaximumHeight(40);
         }
         
-        // Apply compact stylesheet with larger, more readable text
+        // Apply compact stylesheet with larger, more readable text and proper title spacing
         setStyleSheet(styleSheet() + 
-            "QGroupBox { font-size: 9pt; padding-top: 5px; margin-top: 1px; margin-bottom: 1px; }"
-            "QGroupBox::title { padding: 0 2px 0 2px; }"
+            "QGroupBox { font-size: 9pt; padding-top: 15px; margin-top: 5px; margin-bottom: 2px; }"
+            "QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 5px 0 5px; top: -7px; left: 10px; }"
             "QLabel { font-size: 9pt; min-width: 85px; }"
             "QPushButton { font-size: 9pt; padding: 1px 3px; max-height: 22px; }"
             "QTableWidget { font-size: 8pt; }"
@@ -1176,12 +1193,12 @@ void Dialog::optimizeForSmallScreen()
         if (ui->progressLabel) ui->progressLabel->setMinimumWidth(90);
         if (ui->nextMaterialLabel) ui->nextMaterialLabel->setMinimumWidth(90);
         
-        // Find all group boxes and apply tight layout
+        // Find all group boxes and apply layout with proper title space
         QList<QGroupBox*> groupBoxes = findChildren<QGroupBox*>();
         for (QGroupBox* groupBox : groupBoxes) {
             if (groupBox->layout()) {
-                groupBox->layout()->setContentsMargins(2, 5, 2, 2);
-                groupBox->layout()->setSpacing(1);
+                groupBox->layout()->setContentsMargins(5, 12, 5, 3); // More top margin for title
+                groupBox->layout()->setSpacing(2);
             }
         }
         
@@ -1193,5 +1210,156 @@ void Dialog::optimizeForSmallScreen()
         if (layout()) {
             layout()->setSizeConstraint(QLayout::SetDefaultConstraint);
         }
+    }
+}
+
+void Dialog::setupTooltips()
+{
+    // Recipe management tooltips
+    ui->addRecipeRow->setToolTip("Add a new layer for material change");
+    ui->removeRecipeRow->setToolTip("Remove selected row from recipe");
+    ui->loadRecipe->setToolTip("Load a previously saved recipe from file");
+    ui->saveRecipe->setToolTip("Save current recipe to file");
+    
+    // Printer control tooltips
+    ui->checkstatus->setToolTip("Check printer connection and current status");
+    ui->toggleAutoUpdate->setToolTip("Enable/disable automatic status updates every 5 seconds");
+    ui->startPr->setToolTip("Start print job on the printer");
+    ui->pausePr->setToolTip("Pause current print job");
+    ui->resumePr->setToolTip("Resume paused print job");
+    ui->stopPr->setToolTip("Stop current print job completely");
+    
+    // Motor control tooltips
+    ui->motor_settings->setToolTip("Enter motor command: PUMP,DIRECTION,TIME\nExample: A,F,30 (Pump A, Forward, 30 seconds)");
+    ui->manualrun->setToolTip("Execute the motor command entered above");
+    ui->stopMr->setToolTip("Stop currently running motor");
+    
+    // Multi-material tooltips
+    ui->startMultiMaterialPrint->setToolTip("Start automated multi-material print with current recipe");
+    ui->stopMM->setToolTip("Stop multi-material automation (printer continues normally)");
+    
+    // File management tooltips
+    ui->getFiles->setToolTip("Refresh list of available print files on the printer");
+    
+    // Recipe table tooltip
+    ui->recipeTable->setToolTip("Define material changes: Set layer numbers and select materials (A, B, C, D) for each change");
+}
+
+void Dialog::setupKeyboardShortcuts()
+{
+    // Create keyboard shortcuts for common actions
+    QShortcut *saveShortcut = new QShortcut(QKeySequence("Ctrl+S"), this);
+    connect(saveShortcut, &QShortcut::activated, this, &Dialog::on_saveRecipe_clicked);
+    
+    QShortcut *checkStatusShortcut = new QShortcut(QKeySequence("F5"), this);
+    connect(checkStatusShortcut, &QShortcut::activated, this, &Dialog::on_checkstatus_clicked);
+    
+    QShortcut *startPrintShortcut = new QShortcut(QKeySequence("Ctrl+Shift+P"), this);
+    connect(startPrintShortcut, &QShortcut::activated, this, &Dialog::on_startMultiMaterialPrint_clicked);
+    
+    QShortcut *addRowShortcut = new QShortcut(QKeySequence("Ctrl+Plus"), this);
+    connect(addRowShortcut, &QShortcut::activated, this, &Dialog::on_addRecipeRow_clicked);
+    
+    QShortcut *removeRowShortcut = new QShortcut(QKeySequence("Delete"), this);
+    connect(removeRowShortcut, &QShortcut::activated, this, &Dialog::on_removeRecipeRow_clicked);
+}
+
+bool Dialog::validateMotorControlInput(const QString &input)
+{
+    if (input.isEmpty()) {
+        QMessageBox::warning(this, "Invalid Input", "Please enter a motor command.\nFormat: PUMP,DIRECTION,TIME\nExample: A,F,30");
+        return false;
+    }
+    
+    QStringList parts = input.split(",");
+    if (parts.size() != 3) {
+        QMessageBox::warning(this, "Invalid Input", "Motor command must have 3 parts separated by commas.\nFormat: PUMP,DIRECTION,TIME\nExample: A,F,30");
+        return false;
+    }
+    
+    // Validate pump (A, B, C, or D)
+    QString pump = parts[0].trimmed().toUpper();
+    if (!QStringList({"A", "B", "C", "D"}).contains(pump)) {
+        QMessageBox::warning(this, "Invalid Pump", "Pump must be A, B, C, or D.\nYou entered: " + parts[0]);
+        return false;
+    }
+    
+    // Validate direction (F or R)
+    QString direction = parts[1].trimmed().toUpper();
+    if (!QStringList({"F", "R"}).contains(direction)) {
+        QMessageBox::warning(this, "Invalid Direction", "Direction must be F (Forward) or R (Reverse).\nYou entered: " + parts[1]);
+        return false;
+    }
+    
+    // Validate time (positive number)
+    bool ok;
+    int time = parts[2].trimmed().toInt(&ok);
+    if (!ok || time <= 0) {
+        QMessageBox::warning(this, "Invalid Time", "Time must be a positive number (seconds).\nYou entered: " + parts[2]);
+        return false;
+    }
+    
+    if (time > 300) { // Sanity check - max 5 minutes
+        QMessageBox::warning(this, "Time Too Long", "Time cannot exceed 300 seconds (5 minutes).\nYou entered: " + QString::number(time));
+        return false;
+    }
+    
+    return true;
+}
+
+void Dialog::setupClearOutputButton()
+{
+    // Create a small clear button and add it near the output area
+    QPushButton *clearButton = new QPushButton("Clear Output", this);
+    clearButton->setMaximumWidth(80);
+    clearButton->setToolTip("Clear all text from the output area (Ctrl+L)");
+    clearButton->setStyleSheet("QPushButton { font-size: 7pt; padding: 1px 2px; }");
+    
+    // Connect the button to clear the text browser
+    connect(clearButton, &QPushButton::clicked, [this]() {
+        ui->textBrowser->clear();
+        ui->textBrowser->append("Output cleared.");
+    });
+    
+    // Add keyboard shortcut for clearing output
+    QShortcut *clearShortcut = new QShortcut(QKeySequence("Ctrl+L"), this);
+    connect(clearShortcut, &QShortcut::activated, [this]() {
+        ui->textBrowser->clear();
+        ui->textBrowser->append("Output cleared.");
+    });
+    
+    // Try to find a suitable layout to add the button to
+    // We'll add it to the right side layout near the output area
+    QWidget *outputWidget = ui->textBrowser->parentWidget();
+    if (outputWidget && outputWidget->layout()) {
+        // Find the layout containing the text browser and add button
+        QVBoxLayout *outputLayout = qobject_cast<QVBoxLayout*>(outputWidget->layout());
+        if (outputLayout) {
+            QHBoxLayout *buttonLayout = new QHBoxLayout();
+            buttonLayout->addStretch();
+            buttonLayout->addWidget(clearButton);
+            outputLayout->addLayout(buttonLayout);
+        }
+    }
+}
+
+void Dialog::setButtonStates(bool enabled)
+{
+    // Disable/enable buttons during operations to prevent conflicts
+    ui->manualrun->setEnabled(enabled);
+    ui->startPr->setEnabled(enabled);
+    ui->pausePr->setEnabled(enabled);
+    ui->resumePr->setEnabled(enabled);
+    ui->stopPr->setEnabled(enabled);
+    ui->startMultiMaterialPrint->setEnabled(enabled);
+    ui->getFiles->setEnabled(enabled);
+    
+    // Update button text/style to indicate busy state
+    if (!enabled) {
+        ui->checkstatus->setText("Checking...");
+        ui->checkstatus->setEnabled(false);
+    } else {
+        ui->checkstatus->setText("Check Status");
+        ui->checkstatus->setEnabled(true);
     }
 }

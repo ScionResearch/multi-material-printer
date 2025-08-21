@@ -83,6 +83,7 @@ private slots:
     void handleOperationStarted();
     void handleConnectionLost();
     void handleHardwareError(const QString &errorDescription);
+    void setButtonStates(bool enabled);
 
 private:
     Ui::Dialog *ui;
@@ -92,6 +93,9 @@ private:
      void onPrintFileclicked(QListWidgetItem *item);
      void checkConnectionStatus();
      void setupRecipeTable();
+     void setupTooltips();
+     void setupKeyboardShortcuts();
+     void setupClearOutputButton();
      void addRecipeTableRow(int layerNum = 1, const QString &material = "A");
      QString generateRecipeString();
      void updateStatusDisplay();
@@ -101,6 +105,7 @@ private:
      bool validatePrintSetup();
      bool validateRecipe();
      bool validateConnection();
+     bool validateMotorControlInput(const QString &input);
      void clearRecipeTableWidgets();
      void optimizeForSmallScreen();
      QProcess *pythonProcess = nullptr; // Pointer to the Python script process

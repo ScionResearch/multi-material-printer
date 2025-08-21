@@ -431,7 +431,7 @@ QPushButton:pressed {
      <item>
       <widget class="QLabel" name="label_7">
        <property name="text">
-        <string>(2023) A Collaborative Project between Scion and Massey AgriFood Digital Lab </string>
+        <string></string>
        </property>
       </widget>
      </item>
@@ -453,14 +453,14 @@ QPushButton:pressed {
        <item>
         <widget class="QLabel" name="label_4">
          <property name="text">
-          <string>Author: JH Odendaal</string>
+          <string></string>
          </property>
         </widget>
        </item>
        <item>
         <widget class="QLabel" name="label_6">
          <property name="text">
-          <string>Email: jh.odendaal@outlook.com</string>
+          <string></string>
          </property>
         </widget>
        </item>
