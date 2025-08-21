@@ -1,0 +1,75 @@
+# Git ignore for multi-material-printer project
+
+# Build directory (all compiled files and build artifacts)
+/build/
+
+# Legacy build directories (to be removed after migration)
+/build-*/
+
+# Compiled object files
+*.o
+*.obj
+
+# Qt moc and UI generated files
+moc_*.cpp
+moc_*.o
+ui_*.h
+
+# Linker and executable output
+*.exe
+*.dll
+*.so
+*.dylib
+untitled6
+ScionMMUController
+
+# Python compiled files and caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python virtual environments
+env/
+venv/
+.venv/
+
+# Configuration files with sensitive data
+config/network_settings.ini
+config/*.local
+
+# Log files
+*.log
+logs/
+
+# ZIP, archives, and backups
+*.zip
+*.tar.gz
+*.tgz
+*~
+*.bak
+
+# Qt Creator project files
+*.pro.user
+*.pro.user.*
+*.qmake.stash
+Makefile
+Makefile.Debug
+Makefile.Release
+
+# CMake artifacts
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# IDE and editor directories
+.vscode/
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.temp

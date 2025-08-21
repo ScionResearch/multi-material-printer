@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/images">
+        <file>assets/Picture1.png</file>
+        <file>assets/Picture2.png</file>
+    </qresource>
+    <qresource prefix="/config">
+        <file>../../config/pump_profiles.json</file>
+    </qresource>
+</RCC>
