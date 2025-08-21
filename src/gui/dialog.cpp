@@ -21,7 +21,7 @@
 #include <QThread>
 #include <QSet>
 #include <QApplication>
-#include <QDesktopWidget>
+#include <QScreen>
 #include "scriptworker.h"
 
 Dialog::Dialog(QWidget *parent)
@@ -1110,53 +1110,65 @@ void Dialog::clearRecipeTableWidgets()
 
 void Dialog::optimizeForSmallScreen()
 {
-    // Get screen size to determine if we need optimization
-    QRect screenGeometry = QApplication::desktop()->screenGeometry();
+    // Get screen size using modern Qt API (fixes deprecation warning)
+    QScreen *screen = QApplication::primaryScreen();
+    if (!screen) return;
+    
+    QRect screenGeometry = screen->geometry();
     int screenWidth = screenGeometry.width();
     int screenHeight = screenGeometry.height();
     
     // If screen is small (like 1024x600), apply optimizations
     if (screenWidth <= 1024 || screenHeight <= 600)
     {
-        // Resize window to fit small screen better
-        resize(qMin(1000, screenWidth - 20), qMin(570, screenHeight - 30));
+        // Resize window to fit small screen better - much shorter for 600px screens
+        resize(qMin(1000, screenWidth - 20), qMin(550, screenHeight - 50));
         
-        // Make recipe table more compact
+        // Make recipe table very compact
         if (ui->recipeTable)
         {
-            ui->recipeTable->setMaximumHeight(120);
-            ui->recipeTable->setMinimumHeight(80);
+            ui->recipeTable->setMaximumHeight(100);
+            ui->recipeTable->setMinimumHeight(60);
         }
         
         // Make text browser more compact
         if (ui->textBrowser)
         {
-            ui->textBrowser->setMaximumHeight(150);
-            ui->textBrowser->setMinimumHeight(100);
+            ui->textBrowser->setMaximumHeight(120);
+            ui->textBrowser->setMinimumHeight(80);
         }
         
-        // Reduce margins and spacing
+        // Reduce margins and spacing significantly
         if (layout())
         {
-            layout()->setContentsMargins(5, 5, 5, 5);
-            layout()->setSpacing(3);
+            layout()->setContentsMargins(3, 2, 3, 2);
+            layout()->setSpacing(2);
         }
         
-        // Make files widget more compact
+        // Make files widget very compact
         if (ui->filesWidget)
         {
-            ui->filesWidget->setMaximumHeight(80);
+            ui->filesWidget->setMaximumHeight(60);
         }
         
         // Apply compact stylesheet for small screens
         setStyleSheet(styleSheet() + 
-            "QGroupBox { font-size: 9pt; padding-top: 10px; margin-top: 5px; }"
-            "QLabel { font-size: 8pt; }"
-            "QPushButton { font-size: 8pt; padding: 2px 6px; }"
-            "QTableWidget { font-size: 8pt; }"
+            "QGroupBox { font-size: 8pt; padding-top: 8px; margin-top: 3px; margin-bottom: 2px; }"
+            "QLabel { font-size: 8pt; min-width: 80px; }"
+            "QPushButton { font-size: 8pt; padding: 1px 4px; }"
+            "QTableWidget { font-size: 7pt; }"
             "QTextBrowser { font-size: 7pt; }"
-            "QListWidget { font-size: 8pt; }"
+            "QListWidget { font-size: 7pt; }"
+            "QVBoxLayout { spacing: 2px; }"
+            "QHBoxLayout { spacing: 3px; }"
         );
+        
+        // Make status labels wider to prevent text cutoff
+        if (ui->connectionStatusLabel) ui->connectionStatusLabel->setMinimumWidth(80);
+        if (ui->printerStateLabel) ui->printerStateLabel->setMinimumWidth(80);
+        if (ui->currentFileLabel) ui->currentFileLabel->setMinimumWidth(80);
+        if (ui->progressLabel) ui->progressLabel->setMinimumWidth(80);
+        if (ui->nextMaterialLabel) ui->nextMaterialLabel->setMinimumWidth(80);
         
         // Set window to be resizable for small screens
         setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
