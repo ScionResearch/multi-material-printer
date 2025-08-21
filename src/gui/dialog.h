@@ -96,6 +96,7 @@ private:
      void setupTooltips();
      void setupKeyboardShortcuts();
      void setupClearOutputButton();
+     void updateUtilityStatus(const QString &message);
      void addRecipeTableRow(int layerNum = 1, const QString &material = "A");
      QString generateRecipeString();
      void updateStatusDisplay();

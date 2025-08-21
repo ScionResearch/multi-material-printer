@@ -61,8 +61,14 @@ Dialog::Dialog(QWidget *parent)
     connect(scriptWorker, &ScriptWorker::hardwareError, this, &Dialog::handleHardwareError);
     
     // Connect button state management to operation events
-    connect(scriptWorker, &ScriptWorker::operationStarted, this, [this]() { setButtonStates(false); });
-    connect(scriptWorker, &ScriptWorker::scriptFinished, this, [this]() { setButtonStates(true); });
+    connect(scriptWorker, &ScriptWorker::operationStarted, this, [this]() { 
+        setButtonStates(false); 
+        updateUtilityStatus("Processing...");
+    });
+    connect(scriptWorker, &ScriptWorker::scriptFinished, this, [this]() { 
+        setButtonStates(true);
+        updateUtilityStatus("Operation completed");
+    });
     
     // Start the worker thread
     workerThread->start();
@@ -1197,7 +1203,7 @@ void Dialog::optimizeForSmallScreen()
         QList<QGroupBox*> groupBoxes = findChildren<QGroupBox*>();
         for (QGroupBox* groupBox : groupBoxes) {
             if (groupBox->layout()) {
-                groupBox->layout()->setContentsMargins(5, 12, 5, 3); // More top margin for title
+                groupBox->layout()->setContentsMargins(4, 8, 4, 2); // More top margin for title
                 groupBox->layout()->setSpacing(2);
             }
         }
@@ -1309,16 +1315,11 @@ bool Dialog::validateMotorControlInput(const QString &input)
 
 void Dialog::setupClearOutputButton()
 {
-    // Create a small clear button and add it near the output area
-    QPushButton *clearButton = new QPushButton("Clear Output", this);
-    clearButton->setMaximumWidth(80);
-    clearButton->setToolTip("Clear all text from the output area (Ctrl+L)");
-    clearButton->setStyleSheet("QPushButton { font-size: 7pt; padding: 1px 2px; }");
-    
-    // Connect the button to clear the text browser
-    connect(clearButton, &QPushButton::clicked, [this]() {
+    // Connect the UI clear button to clear the text browser
+    connect(ui->clearOutputButton, &QPushButton::clicked, [this]() {
         ui->textBrowser->clear();
         ui->textBrowser->append("Output cleared.");
+        updateUtilityStatus("Output cleared");
     });
     
     // Add keyboard shortcut for clearing output
@@ -1326,21 +1327,8 @@ void Dialog::setupClearOutputButton()
     connect(clearShortcut, &QShortcut::activated, [this]() {
         ui->textBrowser->clear();
         ui->textBrowser->append("Output cleared.");
+        updateUtilityStatus("Output cleared");
     });
-    
-    // Try to find a suitable layout to add the button to
-    // We'll add it to the right side layout near the output area
-    QWidget *outputWidget = ui->textBrowser->parentWidget();
-    if (outputWidget && outputWidget->layout()) {
-        // Find the layout containing the text browser and add button
-        QVBoxLayout *outputLayout = qobject_cast<QVBoxLayout*>(outputWidget->layout());
-        if (outputLayout) {
-            QHBoxLayout *buttonLayout = new QHBoxLayout();
-            buttonLayout->addStretch();
-            buttonLayout->addWidget(clearButton);
-            outputLayout->addLayout(buttonLayout);
-        }
-    }
 }
 
 void Dialog::setButtonStates(bool enabled)
@@ -1362,4 +1350,17 @@ void Dialog::setButtonStates(bool enabled)
         ui->checkstatus->setText("Check Status");
         ui->checkstatus->setEnabled(true);
     }
+}
+
+void Dialog::updateUtilityStatus(const QString &message)
+{
+    // Update the utility bar status label with temporary message
+    ui->statusLabel->setText(message);
+    ui->statusLabel->setStyleSheet("QLabel { font-size: 8pt; color: #0066cc; }"); // Blue for actions
+    
+    // Reset to "Ready" after 3 seconds
+    QTimer::singleShot(3000, [this]() {
+        ui->statusLabel->setText("Ready");
+        ui->statusLabel->setStyleSheet("QLabel { font-size: 8pt; color: #666; }"); // Gray for ready
+    });
 }
