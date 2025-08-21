@@ -1,0 +1,57 @@
+{
+  "pumps": {
+    "pump_a": {
+      "name": "Pump A",
+      "description": "Primary material pump",
+      "gpio_pin": 18,
+      "flow_rate_ml_per_second": 2.5,
+      "max_volume_ml": 500,
+      "calibration": {
+        "steps_per_ml": 100,
+        "last_calibrated": null
+      }
+    },
+    "pump_b": {
+      "name": "Pump B", 
+      "description": "Secondary material pump",
+      "gpio_pin": 19,
+      "flow_rate_ml_per_second": 2.5,
+      "max_volume_ml": 500,
+      "calibration": {
+        "steps_per_ml": 100,
+        "last_calibrated": null
+      }
+    },
+    "drain_pump": {
+      "name": "Drain Pump",
+      "description": "Vat drainage pump",
+      "gpio_pin": 20,
+      "flow_rate_ml_per_second": 5.0,
+      "max_volume_ml": 1000,
+      "calibration": {
+        "steps_per_ml": 80,
+        "last_calibrated": null
+      }
+    }
+  },
+  "material_change": {
+    "drain_volume_ml": 50,
+    "fill_volume_ml": 45,
+    "mixing_time_seconds": 10,
+    "settle_time_seconds": 5
+  },
+  "safety": {
+    "max_pump_runtime_seconds": 300,
+    "emergency_stop_enabled": true,
+    "sensor_check_interval_seconds": 1
+  },
+  "maintenance": {
+    "pump_cycle_count": {
+      "pump_a": 0,
+      "pump_b": 0,
+      "drain_pump": 0
+    },
+    "last_maintenance_date": null,
+    "maintenance_interval_cycles": 1000
+  }
+}

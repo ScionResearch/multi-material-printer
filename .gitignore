@@ -1,5 +1,11 @@
 # Git ignore for multi-material-printer project
 
+# Build directory (all compiled files and build artifacts)
+/build/
+
+# Legacy build directories (to be removed after migration)
+/build-*/
+
 # Compiled object files
 *.o
 *.obj
@@ -9,15 +15,13 @@ moc_*.cpp
 moc_*.o
 ui_*.h
 
-# Build directories
-/build-*/
-
 # Linker and executable output
 *.exe
 *.dll
 *.so
 *.dylib
 untitled6
+ScionMMUController
 
 # Python compiled files and caches
 __pycache__/
@@ -29,8 +33,16 @@ env/
 venv/
 .venv/
 
+# Configuration files with sensitive data
+config/network_settings.ini
+config/*.local
+
+# Log files
+*.log
+logs/
+
 # ZIP, archives, and backups
-a*\.zip
+*.zip
 *.tar.gz
 *.tgz
 *~
@@ -40,6 +52,7 @@ a*\.zip
 *.pro.user
 *.pro.user.*
 *.qmake.stash
+Makefile
 Makefile.Debug
 Makefile.Release
 
@@ -56,3 +69,7 @@ cmake_install.cmake
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Temporary files
+*.tmp
+*.temp

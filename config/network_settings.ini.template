@@ -1,0 +1,31 @@
+# Network Settings Configuration for Multi-Material Printer
+# This file configures network connectivity options
+
+[wifi]
+# WiFi network settings
+ssid = ""
+password = ""
+# Set to true to connect to existing WiFi network
+enabled = false
+
+[access_point]
+# Access Point mode settings
+ssid = "ScionMMU"
+password = "scionmmu123"
+# IP address range for AP mode
+ip_address = "192.168.4.1"
+# Set to true to enable AP mode (disables WiFi client mode)
+enabled = true
+
+[printer]
+# Printer connection settings
+# Auto-discovery will be attempted if ip_address is empty
+ip_address = ""
+port = 80
+# Timeout for printer communication (seconds)
+timeout = 10
+
+[network]
+# General network settings
+scan_interval = 30
+retry_attempts = 3
