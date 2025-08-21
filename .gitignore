@@ -15,6 +15,10 @@ moc_*.cpp
 moc_*.o
 ui_*.h
 
+# Qt build artifacts
+moc_*.h
+qrc_*.cpp
+
 # Linker and executable output
 *.exe
 *.dll
