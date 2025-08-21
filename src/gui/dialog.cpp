@@ -1118,59 +1118,74 @@ void Dialog::optimizeForSmallScreen()
     int screenWidth = screenGeometry.width();
     int screenHeight = screenGeometry.height();
     
-    // If screen is small (like 1024x600), apply optimizations
+    // If screen is small (like 1024x600), apply aggressive optimizations
     if (screenWidth <= 1024 || screenHeight <= 600)
     {
-        // Resize window to fit small screen better - much shorter for 600px screens
-        resize(qMin(1000, screenWidth - 20), qMin(550, screenHeight - 50));
+        // Much more aggressive window sizing - account for VNC status bar (~40px) and window decorations (~80px)
+        int availableHeight = screenHeight - 120;
+        resize(qMin(1000, screenWidth - 20), qMin(450, availableHeight));
         
-        // Make recipe table very compact
+        // Make recipe table extremely compact
         if (ui->recipeTable)
         {
-            ui->recipeTable->setMaximumHeight(100);
-            ui->recipeTable->setMinimumHeight(60);
+            ui->recipeTable->setMaximumHeight(70);
+            ui->recipeTable->setMinimumHeight(50);
         }
         
-        // Make text browser more compact
+        // Make text browser much smaller - this is the main space hog
         if (ui->textBrowser)
         {
-            ui->textBrowser->setMaximumHeight(120);
-            ui->textBrowser->setMinimumHeight(80);
+            ui->textBrowser->setMaximumHeight(80);
+            ui->textBrowser->setMinimumHeight(60);
         }
         
-        // Reduce margins and spacing significantly
+        // Reduce margins and spacing to minimum
         if (layout())
         {
-            layout()->setContentsMargins(3, 2, 3, 2);
-            layout()->setSpacing(2);
+            layout()->setContentsMargins(2, 1, 2, 1);
+            layout()->setSpacing(1);
         }
         
-        // Make files widget very compact
+        // Make files widget extremely compact
         if (ui->filesWidget)
         {
-            ui->filesWidget->setMaximumHeight(60);
+            ui->filesWidget->setMaximumHeight(40);
         }
         
-        // Apply compact stylesheet for small screens
+        // Apply very compact stylesheet for small screens
         setStyleSheet(styleSheet() + 
-            "QGroupBox { font-size: 8pt; padding-top: 8px; margin-top: 3px; margin-bottom: 2px; }"
-            "QLabel { font-size: 8pt; min-width: 80px; }"
-            "QPushButton { font-size: 8pt; padding: 1px 4px; }"
-            "QTableWidget { font-size: 7pt; }"
-            "QTextBrowser { font-size: 7pt; }"
-            "QListWidget { font-size: 7pt; }"
-            "QVBoxLayout { spacing: 2px; }"
-            "QHBoxLayout { spacing: 3px; }"
+            "QGroupBox { font-size: 7pt; padding-top: 5px; margin-top: 1px; margin-bottom: 1px; }"
+            "QGroupBox::title { padding: 0 2px 0 2px; }"
+            "QLabel { font-size: 7pt; min-width: 85px; }"
+            "QPushButton { font-size: 7pt; padding: 1px 3px; max-height: 20px; }"
+            "QTableWidget { font-size: 6pt; }"
+            "QTextBrowser { font-size: 6pt; max-height: 80px; }"
+            "QListWidget { font-size: 6pt; }"
+            "QVBoxLayout { spacing: 1px; }"
+            "QHBoxLayout { spacing: 2px; }"
+            "QProgressBar { max-height: 12px; font-size: 6pt; }"
+            "QComboBox, QSpinBox { font-size: 6pt; max-height: 18px; }"
+            "QLineEdit { font-size: 6pt; max-height: 18px; }"
         );
         
         // Make status labels wider to prevent text cutoff
-        if (ui->connectionStatusLabel) ui->connectionStatusLabel->setMinimumWidth(80);
-        if (ui->printerStateLabel) ui->printerStateLabel->setMinimumWidth(80);
-        if (ui->currentFileLabel) ui->currentFileLabel->setMinimumWidth(80);
-        if (ui->progressLabel) ui->progressLabel->setMinimumWidth(80);
-        if (ui->nextMaterialLabel) ui->nextMaterialLabel->setMinimumWidth(80);
+        if (ui->connectionStatusLabel) ui->connectionStatusLabel->setMinimumWidth(90);
+        if (ui->printerStateLabel) ui->printerStateLabel->setMinimumWidth(90);
+        if (ui->currentFileLabel) ui->currentFileLabel->setMinimumWidth(90);
+        if (ui->progressLabel) ui->progressLabel->setMinimumWidth(90);
+        if (ui->nextMaterialLabel) ui->nextMaterialLabel->setMinimumWidth(90);
+        
+        // Find all group boxes and apply tight layout
+        QList<QGroupBox*> groupBoxes = findChildren<QGroupBox*>();
+        for (QGroupBox* groupBox : groupBoxes) {
+            if (groupBox->layout()) {
+                groupBox->layout()->setContentsMargins(2, 5, 2, 2);
+                groupBox->layout()->setSpacing(1);
+            }
+        }
         
         // Set window to be resizable for small screens
         setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+        setMaximumHeight(450); // Hard cap on window height
     }
 }
