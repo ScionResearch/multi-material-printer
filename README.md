@@ -80,7 +80,7 @@ The system uses a single-board computer (like a Raspberry Pi) to act as an inter
    sudo ./tools/startAP.sh
    ```
 2. Pi will reboot and create its own WiFi network
-3. Connect your printer to this network (default IP: 192.168.4.2)
+3. Connect your printer to this network
 
 **Option B: WiFi Client Mode**  
 1. Edit network configuration:
