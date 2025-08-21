@@ -69,6 +69,14 @@ The system uses a single-board computer (like a Raspberry Pi) to act as an inter
    - Edit `config/pump_profiles.json` for your hardware setup
 
 4. **Build and run:**
+   
+   **Option A: Quick Build & Run (Recommended)**
+   ```bash
+   # Linux/macOS
+   ./build_and_run.sh
+   ```
+   
+   **Option B: Manual Build**
    ```bash
    cd src/gui
    qmake ScionMMUController.pro
@@ -109,6 +117,12 @@ Network topology:
 
 1. **Launch the Application:**
    ```bash
+   # Quick build and run
+   ./build_and_run.sh     # Linux/macOS
+   # or
+   # build_and_run.bat     # Windows
+   
+   # Or run directly if already built
    ./build/ScionMMUController
    ```
 
