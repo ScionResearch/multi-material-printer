@@ -20,6 +20,8 @@
 #include <QHeaderView>
 #include <QThread>
 #include <QSet>
+#include <QApplication>
+#include <QDesktopWidget>
 #include "scriptworker.h"
 
 Dialog::Dialog(QWidget *parent)
@@ -27,6 +29,10 @@ Dialog::Dialog(QWidget *parent)
 {
 
     ui->setupUi(this);
+    
+    // Optimize for small screens
+    optimizeForSmallScreen();
+    
     setupRecipeTable();
     
     // Initialize status update timer
@@ -1100,4 +1106,59 @@ void Dialog::clearRecipeTableWidgets()
     
     // Clear all rows
     ui->recipeTable->setRowCount(0);
+}
+
+void Dialog::optimizeForSmallScreen()
+{
+    // Get screen size to determine if we need optimization
+    QRect screenGeometry = QApplication::desktop()->screenGeometry();
+    int screenWidth = screenGeometry.width();
+    int screenHeight = screenGeometry.height();
+    
+    // If screen is small (like 1024x600), apply optimizations
+    if (screenWidth <= 1024 || screenHeight <= 600)
+    {
+        // Resize window to fit small screen better
+        resize(qMin(1000, screenWidth - 20), qMin(570, screenHeight - 30));
+        
+        // Make recipe table more compact
+        if (ui->recipeTable)
+        {
+            ui->recipeTable->setMaximumHeight(120);
+            ui->recipeTable->setMinimumHeight(80);
+        }
+        
+        // Make text browser more compact
+        if (ui->textBrowser)
+        {
+            ui->textBrowser->setMaximumHeight(150);
+            ui->textBrowser->setMinimumHeight(100);
+        }
+        
+        // Reduce margins and spacing
+        if (layout())
+        {
+            layout()->setContentsMargins(5, 5, 5, 5);
+            layout()->setSpacing(3);
+        }
+        
+        // Make files widget more compact
+        if (ui->filesWidget)
+        {
+            ui->filesWidget->setMaximumHeight(80);
+        }
+        
+        // Apply compact stylesheet for small screens
+        setStyleSheet(styleSheet() + 
+            "QGroupBox { font-size: 9pt; padding-top: 10px; margin-top: 5px; }"
+            "QLabel { font-size: 8pt; }"
+            "QPushButton { font-size: 8pt; padding: 2px 6px; }"
+            "QTableWidget { font-size: 8pt; }"
+            "QTextBrowser { font-size: 7pt; }"
+            "QListWidget { font-size: 8pt; }"
+        );
+        
+        // Set window to be resizable for small screens
+        setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    }
 }

@@ -102,6 +102,7 @@ private:
      bool validateRecipe();
      bool validateConnection();
      void clearRecipeTableWidgets();
+     void optimizeForSmallScreen();
      QProcess *pythonProcess = nullptr; // Pointer to the Python script process
      QProcess *pythonFunction = nullptr;
      QProcess *WiFiFunction;
