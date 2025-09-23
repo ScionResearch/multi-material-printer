@@ -210,7 +210,7 @@ class PrintManager:
                     print(f"Current layer: {current_layer}")
 
                 # Check if we need to change material (only if not already processed this layer)
-                if current_layer in self.recipe and not hasattr(self, '_last_processed_layer') or current_layer != getattr(self, '_last_processed_layer', -1):
+                if current_layer in self.recipe and (not hasattr(self, '_last_processed_layer') or current_layer != getattr(self, '_last_processed_layer', -1)):
                     material = self.recipe[current_layer]
                     print(f"\nMATERIAL CHANGE: Layer {current_layer} → Material {material}")
 
