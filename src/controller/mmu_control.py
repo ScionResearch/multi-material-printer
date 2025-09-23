@@ -87,17 +87,15 @@ class MMUController:
             bool: True if successful
         """
         try:
-            print(f"\n🔄 MMU CONTROLLER: Material change to {target_material}")
-            print("=" * 40)
+            print(f"MMU: Changing to material {target_material}")
 
             # Validate target material
             valid_materials = ['A', 'B', 'C', 'D']
             if target_material.upper() not in valid_materials:
-                print(f"❌ ERROR: Invalid material '{target_material}'. Must be one of: {valid_materials}")
+                print(f"ERROR: Invalid material '{target_material}'. Must be one of: {valid_materials}")
                 return False
 
             target_material = target_material.upper()
-            print(f"✅ Target material validated: {target_material}")
 
             # Get material change parameters
             change_config = self.pump_config.get("material_change", {})
@@ -106,56 +104,47 @@ class MMUController:
             mixing_time = change_config.get("mixing_time_seconds", 10)
             settle_time = change_config.get("settle_time_seconds", 5)
 
-            print(f"📋 Material change parameters:")
-            print(f"   💧 Drain volume: {drain_volume}ml")
-            print(f"   💧 Fill volume: {fill_volume}ml")
-            print(f"   ⏱️  Mixing time: {mixing_time}s")
-            print(f"   ⏱️  Settle time: {settle_time}s")
-            print("─" * 40)
+            # Material change parameters loaded
 
             # Step 1: Drain current material
-            print("🚰 STEP 1/4: Draining current material...")
+            # Step 1: Drain
             if not self.run_pump("drain_pump", "forward", drain_volume):
-                print("❌ FAILED: Could not drain current material")
+                print("ERROR: Could not drain current material")
                 return False
-            print("✅ Drain completed successfully")
 
             # Step 2: Fill with new material
             pump_name = f"pump_{target_material.lower()}"
-            print(f"⛽ STEP 2/4: Filling with material {target_material} from {pump_name}...")
+            # Step 2: Fill
             if not self.run_pump(pump_name, "forward", fill_volume):
-                print(f"❌ FAILED: Could not fill from {pump_name}")
+                print(f"ERROR: Could not fill from {pump_name}")
                 return False
-            print("✅ Fill completed successfully")
 
             # Step 3: Allow mixing time
-            print(f"🌀 STEP 3/4: Mixing phase - waiting {mixing_time}s...")
+            print(f"Mixing phase - waiting {mixing_time}s...")
             import time
             for i in range(mixing_time):
                 remaining = mixing_time - i
                 if remaining % 2 == 0 and remaining > 0:  # Print every 2 seconds
-                    print(f"   ⏰ Mixing... {remaining}s remaining")
+                    pass  # Removed countdown logging
                 time.sleep(1)
-            print("✅ Mixing phase completed")
+            print("Mixing phase completed")
 
             # Step 4: Settle time
-            print(f"🛌 STEP 4/4: Settling phase - waiting {settle_time}s...")
+            print(f"Settling phase - waiting {settle_time}s...")
             for i in range(settle_time):
                 remaining = settle_time - i
                 if remaining > 0:
-                    print(f"   ⏰ Settling... {remaining}s remaining")
+                    pass  # Removed countdown logging
                 time.sleep(1)
-            print("✅ Settling phase completed")
+            print("Settling phase completed")
 
-            print("=" * 40)
-            print(f"🎉 MATERIAL CHANGE TO {target_material} COMPLETED SUCCESSFULLY!")
-            print("=" * 40)
+            print(f"MATERIAL CHANGE TO {target_material} COMPLETED SUCCESSFULLY")
             return True
 
         except Exception as e:
-            print(f"\n💥 EXCEPTION in MMU Controller: {e}")
+            print(f"\nEXCEPTION in MMU Controller: {e}")
             import traceback
-            print("📊 Full traceback:")
+            # Full traceback:
             traceback.print_exc()
             return False
     
@@ -172,31 +161,27 @@ class MMUController:
             bool: True if successful
         """
         try:
-            print(f"\n⚙️  PUMP CONTROL: {pump_name}")
-            print("─" * 30)
+            # Running pump: {pump_name}
 
             # Get pump configuration
             pumps = self.pump_config.get("pumps", {})
             if pump_name not in pumps:
-                print(f"❌ ERROR: Unknown pump '{pump_name}'")
-                print(f"📋 Available pumps: {list(pumps.keys())}")
+                print(f"ERROR: Unknown pump '{pump_name}'")
+                print(f"Available pumps: {list(pumps.keys())}")
                 return False
 
             pump = pumps[pump_name]
             pump_display_name = pump.get('name', pump_name)
-            print(f"🏷️  Pump: {pump_display_name}")
-            print(f"🧭 Direction: {direction}")
+            # Pump: {pump_display_name}, Direction: {direction}
 
             # Calculate timing if volume is specified
             if volume_ml:
                 flow_rate = pump.get("flow_rate_ml_per_second", 2.5)
                 timing = volume_ml / flow_rate
-                print(f"💧 Volume: {volume_ml}ml")
-                print(f"🌊 Flow rate: {flow_rate}ml/s")
-                print(f"⏱️  Calculated timing: {timing:.2f}s")
+                print(f"Running {pump_display_name}: {volume_ml}ml at {flow_rate}ml/s ({timing:.1f}s)")
             else:
                 timing = 10  # Default 10 seconds
-                print(f"⏱️  Default timing: {timing}s")
+                print(f"Running {pump_display_name}: {timing}s")
 
             # Map pump names to the original script's motor IDs
             motor_map = {
@@ -209,23 +194,20 @@ class MMUController:
             motor_id = motor_map.get(pump_name, "A")
             direction_code = "F" if direction == "forward" else "R"
 
-            print(f"🤖 Motor ID: {motor_id}")
-            print(f"📡 Command: run_stepper('{motor_id}', '{direction_code}', {int(timing)})")
-            print("🚀 Executing pump command...")
+            # Executing motor {motor_id} {direction_code} for {int(timing)}s
 
             # Call the original pump control function
             run_stepper(motor_id, direction_code, int(timing))
 
-            print(f"✅ Pump {pump_display_name} completed successfully")
-            print("─" * 30)
+            print(f"Pump {pump_display_name} completed")
             return True
 
         except Exception as e:
-            print(f"\n💥 ERROR in pump control: {e}")
+            print(f"ERROR in pump control: {e}")
             import traceback
-            print("📊 Full traceback:")
+            # Full traceback:
             traceback.print_exc()
-            print(f"❌ FAILED: Pump {pump_name} operation failed")
+            print(f"FAILED: Pump {pump_name} operation failed")
             return False
     
     def calibrate_pump(self, pump_name, test_volume_ml=10):
