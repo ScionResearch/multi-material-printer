@@ -87,28 +87,82 @@ void Dialog::updateConnectionStatus()
 
 void Dialog::on_startPr_clicked()
 {
-    QString pythonScriptPath = getFileSelection();
+    // Get paths from ConfigManager
+    QString recipePath = ConfigManager::instance().getRecipePath();
+    QString scriptPath = ConfigManager::instance().getScriptPath("print_manager.py");
+    QString printerIP = ConfigManager::instance().getPrinterIP();
 
-    if (!pythonScriptPath.isEmpty())
+    // Check if recipe file exists
+    if (!QFileInfo::exists(recipePath))
     {
-        if (!pythonProcess)
-        {
-            ui->textBrowser->append("Started Print...");
-            pythonProcess = new QProcess(this);
-            connect(pythonProcess, &QProcess::readyReadStandardOutput, this, [this]() {
-            QString output = pythonProcess->readAllStandardOutput();
-            //QMessageBox::information(this, "Python Script Output", output);
-            ui->textBrowser->append(output);
-            });
-        }
-        else
-        {
-            pythonProcess->terminate();
-            pythonProcess->waitForFinished();
-        }
-    pythonProcess->start("python3", QStringList() << pythonScriptPath);
+        QMessageBox::critical(this, "Recipe Error",
+            QString("Recipe file not found: %1\n\nPlease create a recipe first using the 'Set' button above.").arg(recipePath));
+        return;
     }
 
+    // Check if print manager script exists
+    if (!QFileInfo::exists(scriptPath))
+    {
+        QMessageBox::critical(this, "Script Error",
+            QString("Print manager script not found: %1").arg(scriptPath));
+        return;
+    }
+
+    if (!pythonProcess)
+    {
+        ui->textBrowser->append("=== STARTING MULTI-MATERIAL PRINT MANAGER ===");
+        ui->textBrowser->append(QString("Recipe: %1").arg(recipePath));
+        ui->textBrowser->append(QString("Script: %1").arg(scriptPath));
+        ui->textBrowser->append(QString("Printer IP: %1").arg(printerIP));
+
+        pythonProcess = new QProcess(this);
+        connect(pythonProcess, &QProcess::readyReadStandardOutput, this, [this]() {
+            QString output = pythonProcess->readAllStandardOutput();
+            ui->textBrowser->append(output);
+        });
+
+        connect(pythonProcess, &QProcess::readyReadStandardError, this, [this]() {
+            QString error = pythonProcess->readAllStandardError();
+            if (!error.isEmpty()) {
+                ui->textBrowser->append("ERROR: " + error);
+            }
+        });
+
+        connect(pythonProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
+            ui->textBrowser->append("=== PRINT MANAGER FINISHED ===");
+            ui->textBrowser->append(QString("Exit code: %1").arg(exitCode));
+            if (exitCode != 0) {
+                ui->textBrowser->append("Print manager exited with error");
+            }
+        });
+    }
+    else
+    {
+        ui->textBrowser->append("Stopping existing print manager...");
+        pythonProcess->terminate();
+        pythonProcess->waitForFinished(3000);
+    }
+
+    // Build command arguments for print_manager.py
+    QStringList arguments;
+    arguments << scriptPath;
+    arguments << "--recipe" << recipePath;
+    arguments << "--printer-ip" << printerIP;
+
+    ui->textBrowser->append("Starting automated multi-material printing...");
+    ui->textBrowser->append(QString("Command: python3 %1 --recipe %2 --printer-ip %3").arg(scriptPath, recipePath, printerIP));
+
+    pythonProcess->start("python3", arguments);
+
+    if (!pythonProcess->waitForStarted(5000)) {
+        ui->textBrowser->append("ERROR: Failed to start print manager");
+        ui->textBrowser->append(QString("Process error: %1").arg(pythonProcess->errorString()));
+        QMessageBox::critical(this, "Process Error",
+            QString("Failed to start print manager:\n%1").arg(pythonProcess->errorString()));
+    } else {
+        ui->textBrowser->append("✓ Print manager started successfully - monitoring printer for material changes");
+    }
 }
 
 
