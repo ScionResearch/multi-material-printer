@@ -322,6 +322,8 @@ class PrintManager:
                 if match:
                     layer_num = int(match.group(1))
                     # Found layer using pattern
+                    if layer_num <= 0:
+                        return None
                     return layer_num
 
             # If no pattern matches, try to find any number after "current" or "layer"
@@ -329,6 +331,8 @@ class PrintManager:
             if current_match:
                 layer_num = int(current_match.group(1))
                 # Found layer using fallback pattern
+                if layer_num <= 0:
+                    return None
                 return layer_num
 
             # Could not extract layer number
