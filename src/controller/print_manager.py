@@ -364,7 +364,7 @@ class PrintManager:
             success = mmu_control.change_material(material)
 
             if success:
-                # Pump sequence completed
+                pass  # Pump sequence completed
             else:
                 print("ERROR: Pump sequence failed - NOT resuming printer")
                 return False
