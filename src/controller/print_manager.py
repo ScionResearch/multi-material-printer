@@ -304,19 +304,46 @@ class PrintManager:
         Extract current layer from status response.
 
         Args:
-            status (str): Status response
+            status: MonoXStatus object or string
 
         Returns:
             int: Layer number or None if parsing fails
         """
         try:
             print(f"🔍 Extracting layer from status...")
+            print(f"📄 Status type: {type(status)}")
 
-            # Convert status object to string if needed
+            # Handle MonoXStatus object directly
+            if hasattr(status, 'current_layer'):
+                layer_num = status.current_layer
+                print(f"✅ Found current_layer attribute: {layer_num}")
+
+                # Convert to int if it's a string
+                if isinstance(layer_num, str) and layer_num.isdigit():
+                    layer_num = int(layer_num)
+                elif isinstance(layer_num, (int, float)):
+                    layer_num = int(layer_num)
+                else:
+                    print(f"⚠️ current_layer is not numeric: {layer_num} (type: {type(layer_num)})")
+                    return None
+
+                print(f"✅ Parsed current layer: {layer_num}")
+                return layer_num
+
+            # If no current_layer attribute, check other attributes
+            if hasattr(status, 'percent_complete') and hasattr(status, 'status'):
+                print(f"📊 Status: {status.status}, Progress: {getattr(status, 'percent_complete', 'unknown')}%")
+
+                # If just started printing, assume layer 1
+                if status.status in ['print', 'printing'] and str(getattr(status, 'percent_complete', '0')) == '0':
+                    print("📍 Print just started (0% complete) - assuming layer 1")
+                    return 1
+
+            # Fallback to string parsing
             status_str = str(status)
-            print(f"📄 Full status string: {status_str}")
+            print(f"📄 Full status string: {status_str[:200]}{'...' if len(status_str) > 200 else ''}")
 
-            # Look for current_layer field in the status
+            # Look for current_layer field in the status string
             import re
 
             # Try multiple patterns to find current layer
@@ -342,13 +369,8 @@ class PrintManager:
                 print(f"✅ Found layer using 'current' pattern: {layer_num}")
                 return layer_num
 
-            # Check if printer status shows it hasn't started printing yet
-            if "percent_complete: 0" in status_str and ("status: print" in status_str or "status: printing" in status_str):
-                print("📍 Print just started - assuming layer 1")
-                return 1
-
             print("❌ Could not extract layer number from status")
-            print(f"📋 Tried patterns: {patterns}")
+            print(f"📋 Available attributes: {[attr for attr in dir(status) if not attr.startswith('_')] if hasattr(status, '__dict__') else 'N/A'}")
             return None
 
         except Exception as e:
