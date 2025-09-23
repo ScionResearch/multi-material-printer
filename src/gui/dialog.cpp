@@ -8,6 +8,7 @@
 #include <QProcess>
 #include <QDir>
 #include <QTimer>
+#include <QFileInfo>
 #include <QNetworkInterface>
 #include <QNetworkAddressEntry>
 #include <QFileDialog>
@@ -151,13 +152,13 @@ QString Dialog::getFileSelection()
 
 void Dialog::on_stopPr_clicked()
 {
-    QString scriptPath = ConfigManager::instance().getScriptPath("newmonox.py");
+    QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
     QString printerIP = ConfigManager::instance().getPrinterIP();
-    QString pythonCommand = QString("python3 %1 -i %2 -c gostop,end").arg(scriptPath, printerIP);
+    QString pythonCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from printer_comms import stop_print; stop_print('%2')\"").arg(QFileInfo(scriptPath).absolutePath(), printerIP);
     ui->textBrowser->append(pythonCommand);
 
     QProcess process;
-    process.start("python3", QStringList() << scriptPath << "-i" << printerIP << "-c" << "gostop,end");
+    process.start("python3", QStringList() << "-c" << QString("import sys; sys.path.append('%1'); from printer_comms import stop_print; stop_print('%2')").arg(QFileInfo(scriptPath).absolutePath(), printerIP));
     process.waitForFinished();
 
     QByteArray output = process.readAllStandardOutput();
@@ -180,13 +181,13 @@ void Dialog::on_stopPr_clicked()
 
 void Dialog::on_checkstatus_clicked()
 {
-    QString scriptPath = ConfigManager::instance().getScriptPath("newmonox.py");
+    QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
     QString printerIP = ConfigManager::instance().getPrinterIP();
-    QString pythonCommand = QString("python3 %1 -i %2 -c getstatus").arg(scriptPath, printerIP);
+    QString pythonCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from printer_comms import get_status; print(get_status('%2'))\"").arg(QFileInfo(scriptPath).absolutePath(), printerIP);
     ui->textBrowser->append(pythonCommand);
 
     QProcess process;
-    process.start("python3", QStringList() << scriptPath << "-i" << printerIP << "-c" << "getstatus");
+    process.start("python3", QStringList() << "-c" << QString("import sys; sys.path.append('%1'); from printer_comms import get_status; print(get_status('%2'))").arg(QFileInfo(scriptPath).absolutePath(), printerIP));
     process.waitForFinished();
 
     QByteArray output = process.readAllStandardOutput();
@@ -212,13 +213,13 @@ void Dialog::on_checkstatus_clicked()
 
 void Dialog::on_pausePr_clicked()
 {
-    QString scriptPath = ConfigManager::instance().getScriptPath("newmonox.py");
+    QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
     QString printerIP = ConfigManager::instance().getPrinterIP();
-    QString pythonCommand = QString("python3 %1 -i %2 -c gopause").arg(scriptPath, printerIP);
+    QString pythonCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from printer_comms import pause_print; pause_print('%2')\"").arg(QFileInfo(scriptPath).absolutePath(), printerIP);
     ui->textBrowser->append(pythonCommand);
 
     QProcess process;
-    process.start("python3", QStringList() << scriptPath << "-i" << printerIP << "-c" << "gopause");
+    process.start("python3", QStringList() << "-c" << QString("import sys; sys.path.append('%1'); from printer_comms import pause_print; pause_print('%2')").arg(QFileInfo(scriptPath).absolutePath(), printerIP));
     process.waitForFinished();
 
     QByteArray output = process.readAllStandardOutput();
@@ -242,13 +243,13 @@ void Dialog::on_pausePr_clicked()
 
 void Dialog::on_resumePr_clicked()
 {
-    QString scriptPath = ConfigManager::instance().getScriptPath("newmonox.py");
+    QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
     QString printerIP = ConfigManager::instance().getPrinterIP();
-    QString pythonCommand = QString("python3 %1 -i %2 -c goresume").arg(scriptPath, printerIP);
+    QString pythonCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from printer_comms import resume_print; resume_print('%2')\"").arg(QFileInfo(scriptPath).absolutePath(), printerIP);
     ui->textBrowser->append(pythonCommand);
 
     QProcess process;
-    process.start("python3", QStringList() << scriptPath << "-i" << printerIP << "-c" << "goresume");
+    process.start("python3", QStringList() << "-c" << QString("import sys; sys.path.append('%1'); from printer_comms import resume_print; resume_print('%2')").arg(QFileInfo(scriptPath).absolutePath(), printerIP));
     process.waitForFinished();
 
     QByteArray output = process.readAllStandardOutput();
@@ -344,14 +345,14 @@ if (inputValues.size() != 3)
 
 void Dialog::on_getFiles_clicked()
 {
-    QString scriptPath = ConfigManager::instance().getScriptPath("newmonox.py");
+    QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
     QString printerIP = ConfigManager::instance().getPrinterIP();
-    QString pythonCommand = QString("python3 %1 -i %2 -c getfiles").arg(scriptPath, printerIP);
+    QString pythonCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from printer_comms import get_files; print(get_files('%2'))\"").arg(QFileInfo(scriptPath).absolutePath(), printerIP);
     ui->textBrowser->append(pythonCommand);
     ui->filesWidget->clear();
-    
+
     QProcess process;
-    process.start("python3", QStringList() << scriptPath << "-i" << printerIP << "-c" << "getfiles");
+    process.start("python3", QStringList() << "-c" << QString("import sys; sys.path.append('%1'); from printer_comms import get_files; print(get_files('%2'))").arg(QFileInfo(scriptPath).absolutePath(), printerIP));
     process.waitForFinished();
 
     QByteArray output = process.readAllStandardOutput();
@@ -383,11 +384,11 @@ void Dialog::on_getFiles_clicked()
 
 void Dialog::onPrintFileclicked(QListWidgetItem *item)
 {
-    QString scriptPath = ConfigManager::instance().getScriptPath("newmonox.py");
+    QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
     QString printerIP = ConfigManager::instance().getPrinterIP();
     QString internalname = "";
     QString externalname = "";
-    QString pythonCommand = QString("python3 %1 -i %2 -c goprint,").arg(scriptPath, printerIP);
+    QString pythonCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from printer_comms import start_print; start_print('%3', '%2')\"").arg(QFileInfo(scriptPath).absolutePath(), printerIP);
     QMessageBox::StandardButton reply = QMessageBox::question(this,"Confirmation", "Are you sure you want to print this file?", QMessageBox::Yes | QMessageBox::No);
     if (reply == QMessageBox::Yes)
     {
@@ -398,8 +399,7 @@ void Dialog::onPrintFileclicked(QListWidgetItem *item)
             internalname = parts[0];
             externalname = parts[1];
             ui->textBrowser->append(internalname);
-            pythonCommand.append(internalname);
-            pythonCommand+=",end";
+            pythonCommand = pythonCommand.arg(internalname);
             ui->textBrowser->append(pythonCommand);
         }
     }
@@ -410,7 +410,7 @@ void Dialog::onPrintFileclicked(QListWidgetItem *item)
 
 
     QProcess process;
-    process.start("python3", QStringList() << scriptPath << "-i" << printerIP << "-c" << QString("goprint,%1,end").arg(internalname));
+    process.start("python3", QStringList() << "-c" << QString("import sys; sys.path.append('%1'); from printer_comms import start_print; start_print('%2', '%3')").arg(QFileInfo(scriptPath).absolutePath(), internalname, printerIP));
     process.waitForFinished();
 
     QByteArray output = process.readAllStandardOutput();
