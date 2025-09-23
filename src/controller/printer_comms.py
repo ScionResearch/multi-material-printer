@@ -27,15 +27,13 @@ import logging
 # Import uart-wifi library for printer communication
 try:
     from uart_wifi.communication import UartWifi
-    from uart_wifi.errors import ConnectionException, TimeoutException
+    from uart_wifi.errors import ConnectionException
     from uart_wifi.response import MonoXResponseType
     UART_WIFI_AVAILABLE = True
 except ImportError:
     UART_WIFI_AVAILABLE = False
     # Define placeholder exception classes when library is not available
     class ConnectionException(Exception):
-        pass
-    class TimeoutException(Exception):
         pass
     class MonoXResponseType:
         pass
