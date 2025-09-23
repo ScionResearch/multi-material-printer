@@ -31,6 +31,11 @@ try:
     UART_WIFI_AVAILABLE = True
 except ImportError:
     UART_WIFI_AVAILABLE = False
+    # Define placeholder exception classes when library is not available
+    class ConnectionException(Exception):
+        pass
+    class TimeoutException(Exception):
+        pass
     logging.warning("uart-wifi library not available. Install with: pip install uart-wifi>=0.2.1")
 
 
