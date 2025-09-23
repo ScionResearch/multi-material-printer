@@ -56,18 +56,12 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 # Assets and resources
 RESOURCES += assets.qrc
 
-# Distribution files
+# Distribution files and config dependencies
 DISTFILES += \
     assets/Picture1.png \
     assets/Picture2.png \
     ../../config/network_settings.ini.template \
     ../../config/pump_profiles.json
 
-# Post-build steps to copy configuration files
-CONFIG(release, debug|release) {
-    copydata.commands = $(COPY_DIR) ../../config $(DESTDIR)
-    first.depends = $(first) copydata
-    export(first.depends)
-    export(copydata.commands)
-    QMAKE_EXTRA_TARGETS += first copydata
-}
+# Note: Configuration files are accessed directly from ../../config/
+# No need to copy to build directory as ConfigManager uses relative paths
