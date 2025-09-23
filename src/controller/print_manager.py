@@ -457,8 +457,54 @@ class PrintManager:
             
     def _is_print_complete(self, status):
         """Check if print is complete based on status."""
-        # Implementation depends on your printer's status format
-        return "complete" in status.lower() if status else False
+        try:
+            print(f"🔍 Checking if print is complete...")
+
+            # Handle MonoXStatus object
+            if hasattr(status, 'status'):
+                printer_status = status.status
+                percent = getattr(status, 'percent_complete', 0)
+                current_layer = getattr(status, 'current_layer', 0)
+                total_layers = getattr(status, 'total_layers', 0)
+
+                print(f"📊 Printer status: '{printer_status}', Progress: {percent}%, Layer: {current_layer}/{total_layers}")
+
+                # Print is complete if status is specifically "stop" or "complete" or "finished"
+                # AND we're at 100% complete OR we've reached the final layer
+                if printer_status.lower() in ['complete', 'finished', 'done']:
+                    print("✅ Print complete: Status indicates finished")
+                    return True
+
+                if printer_status.lower() == 'stop' and percent >= 100:
+                    print("✅ Print complete: Stopped at 100%")
+                    return True
+
+                if total_layers > 0 and current_layer >= total_layers and percent >= 99:
+                    print("✅ Print complete: Reached final layer")
+                    return True
+
+                # Print is NOT complete if actively printing
+                if printer_status.lower() in ['print', 'printing']:
+                    print("🔄 Print in progress")
+                    return False
+
+                # Print is NOT complete if stopped but not at end
+                if printer_status.lower() == 'stop' and percent < 100:
+                    print("⏸️ Print paused/stopped but not complete")
+                    return False
+
+            # Fallback to string checking (but be more specific)
+            status_str = str(status).lower()
+            if 'status: complete' in status_str or 'status: finished' in status_str:
+                print("✅ Print complete: Found completion status")
+                return True
+
+            print("🔄 Print not complete")
+            return False
+
+        except Exception as e:
+            print(f"💥 Error checking print completion: {e}")
+            return False
 
 
 def main():
