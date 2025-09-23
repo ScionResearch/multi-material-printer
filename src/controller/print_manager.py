@@ -242,8 +242,8 @@ class PrintManager:
 
                 print(f"📐 Current layer: {current_layer}")
 
-                # Check if we need to change material
-                if current_layer in self.recipe:
+                # Check if we need to change material (only if not already processed this layer)
+                if current_layer in self.recipe and not hasattr(self, '_last_processed_layer') or current_layer != getattr(self, '_last_processed_layer', -1):
                     material = self.recipe[current_layer]
                     print("\n" + "🚨" * 20)
                     print(f"🔄 MATERIAL CHANGE TRIGGERED!")
@@ -251,7 +251,8 @@ class PrintManager:
                     print("🚨" * 20)
 
                     if self._handle_material_change(material):
-                        # Remove this change from recipe so we don't repeat it
+                        # Mark this layer as processed and remove from recipe
+                        self._last_processed_layer = current_layer
                         del self.recipe[current_layer]
                         print("✅ Material change completed successfully")
                         print(f"📋 Remaining changes: {len(self.recipe)}")
@@ -261,6 +262,8 @@ class PrintManager:
                     else:
                         print("❌ CRITICAL ERROR: Material change failed!")
                         print("🛑 Consider stopping the print to investigate")
+                        # Mark layer as processed even if failed to prevent repeated attempts
+                        self._last_processed_layer = current_layer
 
                 else:
                     # Show upcoming changes
@@ -402,6 +405,10 @@ class PrintManager:
                 print("🚨 ABORTING material change sequence")
                 return False
             print("✅ Printer paused successfully")
+
+            # Wait for bed to rise after pause
+            print("⏳ Waiting for bed to rise after pause...")
+            time.sleep(3)  # Wait for bed to reach top position
 
             # 2. Run material change pumps
             print(f"🔄 Step 2/3: Executing pump sequence for material {material}...")

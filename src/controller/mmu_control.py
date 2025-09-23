@@ -277,7 +277,8 @@ def run_pump_by_id(pump_id, direction, timing):
     # Map old motor IDs to new pump names
     id_map = {
         "A": "pump_a",
-        "B": "pump_b", 
+        "B": "pump_b",
+        "C": "pump_c",
         "D": "drain_pump"
     }
     

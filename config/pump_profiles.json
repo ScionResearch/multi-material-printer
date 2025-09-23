@@ -22,6 +22,17 @@
         "last_calibrated": null
       }
     },
+    "pump_c": {
+      "name": "Pump C",
+      "description": "Third material pump",
+      "gpio_pin": 21,
+      "flow_rate_ml_per_second": 2.5,
+      "max_volume_ml": 500,
+      "calibration": {
+        "steps_per_ml": 100,
+        "last_calibrated": null
+      }
+    },
     "drain_pump": {
       "name": "Drain Pump",
       "description": "Vat drainage pump",
@@ -49,6 +60,7 @@
     "pump_cycle_count": {
       "pump_a": 0,
       "pump_b": 0,
+      "pump_c": 0,
       "drain_pump": 0
     },
     "last_maintenance_date": null,
