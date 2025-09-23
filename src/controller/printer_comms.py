@@ -86,9 +86,6 @@ class PrinterCommunicator:
     
     def _get_uart_connection(self):
         """Get or create uart-wifi connection instance."""
-        if not UART_WIFI_AVAILABLE:
-            raise Exception("uart-wifi library not available. Install with: pip install uart-wifi>=0.2.1")
-        
         if self._uart_wifi is None:
             self._uart_wifi = UartWifi(self.printer_ip, self.printer_port)
         return self._uart_wifi
