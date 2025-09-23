@@ -285,6 +285,11 @@ class PrintManager:
                     layer_num = int(layer_num)
                 else:
                     return None
+
+                # Layer 0 means print hasn't started yet
+                if layer_num <= 0:
+                    return None
+
                 return layer_num
 
             # If no current_layer attribute, check other attributes
