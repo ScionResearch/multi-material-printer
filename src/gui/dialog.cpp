@@ -278,21 +278,78 @@ void Dialog::on_manualrun_clicked()
 
     // Set the input text from the line edit
     QString inputText = ui->motor_settings->text();
-    ui->textBrowser->append(inputText);
+
+    // Enhanced logging for input validation
+    ui->textBrowser->append("=== MOTOR CONTROL INPUT PROCESSING ===");
+    ui->textBrowser->append(QString("Raw input: '%1'").arg(inputText));
+    ui->textBrowser->append(QString("Input length: %1 characters").arg(inputText.length()));
 
     // Split the input using a comma as the delimiter
     QStringList inputValues = inputText.split(",");
 
-if (inputValues.size() != 3)
+    // Enhanced logging for parsing
+    ui->textBrowser->append(QString("Number of comma-separated values found: %1").arg(inputValues.size()));
+    for (int i = 0; i < inputValues.size(); ++i) {
+        ui->textBrowser->append(QString("Value %1: '%2' (trimmed: '%3')").arg(i+1).arg(inputValues[i]).arg(inputValues[i].trimmed()));
+    }
+
+    if (inputValues.size() != 3)
     {
-        // Incorrect Input format and display an error
-        QMessageBox::critical(this, "Error", "Invalid input format. Expected format: A, F in Motor Control line");
+        // Enhanced error message with more detail
+        ui->textBrowser->append("ERROR: Invalid input format detected!");
+        ui->textBrowser->append("Expected format: Motor,Direction,Timing (e.g., 'A,F,5')");
+        ui->textBrowser->append("- Motor: A, B, C, or D");
+        ui->textBrowser->append("- Direction: F (forward) or R (reverse)");
+        ui->textBrowser->append("- Timing: duration in seconds (integer)");
+        ui->textBrowser->append(QString("You provided %1 values instead of 3").arg(inputValues.size()));
+
+        QMessageBox::critical(this, "Motor Control Error",
+            QString("Invalid input format.\n\n"
+                   "Expected: Motor,Direction,Timing (e.g., 'A,F,5')\n"
+                   "You provided: %1 values\n"
+                   "Raw input: '%2'").arg(inputValues.size()).arg(inputText));
         return;
     }
     QString argumentMotor = inputValues[0].trimmed();
     QString argumentDirection = inputValues[1].trimmed();
     QString argumentTiming = inputValues[2].trimmed();
-    int intargumentTiming = argumentTiming.toInt();
+
+    // Enhanced validation and logging for parsed values
+    ui->textBrowser->append("=== PARAMETER VALIDATION ===");
+    ui->textBrowser->append(QString("Motor: '%1'").arg(argumentMotor));
+    ui->textBrowser->append(QString("Direction: '%1'").arg(argumentDirection));
+    ui->textBrowser->append(QString("Timing: '%1'").arg(argumentTiming));
+
+    // Validate motor parameter
+    if (!argumentMotor.isEmpty() && !(argumentMotor == "A" || argumentMotor == "B" || argumentMotor == "C" || argumentMotor == "D")) {
+        ui->textBrowser->append(QString("ERROR: Invalid motor '%1'. Must be A, B, C, or D").arg(argumentMotor));
+        QMessageBox::critical(this, "Motor Control Error",
+            QString("Invalid motor '%1'.\nMust be A, B, C, or D").arg(argumentMotor));
+        return;
+    }
+
+    // Validate direction parameter
+    if (!argumentDirection.isEmpty() && !(argumentDirection == "F" || argumentDirection == "R")) {
+        ui->textBrowser->append(QString("ERROR: Invalid direction '%1'. Must be F (forward) or R (reverse)").arg(argumentDirection));
+        QMessageBox::critical(this, "Motor Control Error",
+            QString("Invalid direction '%1'.\nMust be F (forward) or R (reverse)").arg(argumentDirection));
+        return;
+    }
+
+    // Validate and convert timing parameter
+    bool timingOk;
+    int intargumentTiming = argumentTiming.toInt(&timingOk);
+    if (!timingOk || intargumentTiming <= 0) {
+        ui->textBrowser->append(QString("ERROR: Invalid timing '%1'. Must be a positive integer (seconds)").arg(argumentTiming));
+        QMessageBox::critical(this, "Motor Control Error",
+            QString("Invalid timing '%1'.\nMust be a positive integer representing duration in seconds").arg(argumentTiming));
+        return;
+    }
+
+    ui->textBrowser->append("✓ All parameters validated successfully");
+    ui->textBrowser->append(QString("✓ Motor: %1, Direction: %2, Duration: %3 seconds").arg(argumentMotor).arg(argumentDirection).arg(intargumentTiming));
+
+    // Build and log the Python command
     QString terminalCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from %2 import %3; %3('%4', '%5', %6)\"")
         .arg(QFileInfo(scriptPath).absolutePath())
         .arg(QFileInfo(scriptPath).baseName())
@@ -300,34 +357,68 @@ if (inputValues.size() != 3)
         .arg(argumentMotor)
         .arg(argumentDirection)
         .arg(intargumentTiming);
-    QString A = argumentMotor;
-    QString B = argumentDirection;
-    QString C = argumentTiming;
+
+    ui->textBrowser->append("=== COMMAND EXECUTION ===");
+    ui->textBrowser->append("Python command to execute:");
     ui->textBrowser->append(terminalCommand);
-    ui->textBrowser->append(A);
-    ui->textBrowser->append(B);
-    ui->textBrowser->append(C);
     //pythonFunction = new QProcess;
 
     if (!pythonFunction)
     {
-        ui->textBrowser->append("Started Motor...");
+        ui->textBrowser->append("Initializing motor control process...");
         pythonFunction = new QProcess(this);
-        connect(pythonFunction, &QProcess::readyReadStandardOutput, this, [this]()   {
-                QString output = QString::fromUtf8(pythonFunction->readAllStandardOutput());
-                QMessageBox::information(this, "Motor Output", output);
-                ui->textBrowser->append("\n******MOTOR RUNNING******\n");
-                ui->textBrowser->append(output);
-                ui->textBrowser->append("\n******END MOTOR RUNNING******");
-                });
+
+        // Enhanced output handling with better logging
+        connect(pythonFunction, &QProcess::readyReadStandardOutput, this, [this]() {
+            QString output = QString::fromUtf8(pythonFunction->readAllStandardOutput());
+            if (!output.isEmpty()) {
+                ui->textBrowser->append("=== MOTOR PROCESS STDOUT ===");
+                ui->textBrowser->append(output.trimmed());
+                ui->textBrowser->append("=== END STDOUT ===");
+            }
+        });
+
+        // Add error output handling
+        connect(pythonFunction, &QProcess::readyReadStandardError, this, [this]() {
+            QString error = QString::fromUtf8(pythonFunction->readAllStandardError());
+            if (!error.isEmpty()) {
+                ui->textBrowser->append("=== MOTOR PROCESS STDERR ===");
+                ui->textBrowser->append(QString("ERROR: %1").arg(error.trimmed()));
+                ui->textBrowser->append("=== END STDERR ===");
+            }
+        });
+
+        // Add process state change handling
+        connect(pythonFunction, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
+            ui->textBrowser->append("=== MOTOR PROCESS FINISHED ===");
+            ui->textBrowser->append(QString("Exit code: %1").arg(exitCode));
+            ui->textBrowser->append(QString("Exit status: %1").arg(exitStatus == QProcess::NormalExit ? "Normal" : "Crashed"));
+            if (exitCode == 0) {
+                ui->textBrowser->append("✓ Motor operation completed successfully");
+            } else {
+                ui->textBrowser->append("✗ Motor operation failed");
+            }
+            ui->textBrowser->append("=== END PROCESS ===");
+        });
     }
     else
     {
+        ui->textBrowser->append("Terminating existing motor process...");
         pythonFunction->terminate();
-        pythonFunction->waitForFinished();
+        pythonFunction->waitForFinished(3000); // Wait up to 3 seconds
+        ui->textBrowser->append("Previous process terminated");
     }
 
-    pythonFunction->start("/bin/bash", QStringList() << "-c" <<terminalCommand);
+    ui->textBrowser->append("Starting motor control process...");
+    pythonFunction->start("/bin/bash", QStringList() << "-c" << terminalCommand);
+
+    if (!pythonFunction->waitForStarted(5000)) {
+        ui->textBrowser->append("ERROR: Failed to start motor control process");
+        ui->textBrowser->append(QString("Process error: %1").arg(pythonFunction->errorString()));
+    } else {
+        ui->textBrowser->append("✓ Motor control process started successfully");
+    }
 
 
 
