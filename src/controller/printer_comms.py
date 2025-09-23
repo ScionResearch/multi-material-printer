@@ -109,12 +109,19 @@ class PrinterCommunicator:
                 responses = uart.send_request(command)
 
                 # Process responses like newmonox.py does
+                import io
+                import contextlib
+
                 output_lines = []
                 if responses is not None and isinstance(responses, Iterable):
                     for response in responses:
                         if isinstance(response, MonoXResponseType):
                             if response is not None and str(response).strip():
-                                output_lines.append(str(response))
+                                # Capture the output from response.print()
+                                f = io.StringIO()
+                                with contextlib.redirect_stdout(f):
+                                    response.print()
+                                output_lines.append(f.getvalue().strip())
                         elif response is not None and str(response).strip():
                             output_lines.append(str(response))
                         else:
