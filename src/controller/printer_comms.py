@@ -28,6 +28,7 @@ import logging
 try:
     from uart_wifi.communication import UartWifi
     from uart_wifi.errors import ConnectionException, TimeoutException
+    from uart_wifi.response import MonoXResponseType
     UART_WIFI_AVAILABLE = True
 except ImportError:
     UART_WIFI_AVAILABLE = False
@@ -35,6 +36,8 @@ except ImportError:
     class ConnectionException(Exception):
         pass
     class TimeoutException(Exception):
+        pass
+    class MonoXResponseType:
         pass
     logging.warning("uart-wifi library not available. Install with: pip install uart-wifi>=0.2.1")
 
@@ -93,35 +96,45 @@ class PrinterCommunicator:
     def _run_printer_command(self, command):
         """
         Execute printer command via uart-wifi library.
-        
+        Based on newmonox.py implementation with retry logic.
+
         Args:
             command (str): Command to send ('getstatus', 'gopause', etc.)
-            
+
         Returns:
-            str: Response data or None if error
+            str: Response data or error message
         """
-        try:
-            uart = self._get_uart_connection()
-            response = uart.send_request(command, timeout=self.timeout)
-            
-            if response and hasattr(response, 'data'):
-                return response.data.strip()
-            elif response:
-                return str(response).strip()
-            else:
-                return None
-                
-        except ConnectionException as e:
-            print(f"Printer connection failed: {e}")
-            self._uart_wifi = None  # Reset connection for retry
-            return None
-        except TimeoutException as e:
-            print(f"Printer command timed out: {command}")
-            return None
-        except Exception as e:
-            print(f"Error running printer command: {e}")
-            self._uart_wifi = None  # Reset connection for retry
-            return None
+        import time
+        from typing import Iterable
+
+        # Try 3 times to get the data (matching newmonox.py behavior)
+        for attempt in range(3):
+            try:
+                uart = UartWifi(self.printer_ip, self.printer_port)
+                responses = uart.send_request(command)
+
+                # Process responses like newmonox.py does
+                output_lines = []
+                if responses is not None and isinstance(responses, Iterable):
+                    for response in responses:
+                        if isinstance(response, MonoXResponseType):
+                            if response is not None and str(response).strip():
+                                output_lines.append(str(response))
+                        elif response is not None and str(response).strip():
+                            output_lines.append(str(response))
+                        else:
+                            output_lines.append(str(response))
+                else:
+                    output_lines.append(str(responses))
+
+                return '\n'.join(output_lines)
+
+            except ConnectionException:
+                time.sleep(1)  # Wait before retry
+                continue
+
+        # If all 3 attempts failed
+        raise ConnectionException(f"Failed to send command after 3 attempts.")
     
     def get_status(self):
         """
