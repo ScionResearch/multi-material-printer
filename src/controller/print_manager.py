@@ -79,93 +79,216 @@ class PrintManager:
     def load_recipe(self, recipe_path):
         """
         Load material change recipe from file.
-        
+
         Args:
             recipe_path (str): Path to recipe file
-            
+
         Returns:
             bool: True if successful
-            
+
         Format: "A,50:B,120:C,200" (material,layer pairs)
         """
         try:
+            print(f"\n📖 LOADING RECIPE")
+            print("=" * 40)
+            print(f"📁 Recipe file: {recipe_path}")
+
+            # Check if file exists
+            import os
+            if not os.path.exists(recipe_path):
+                print(f"❌ ERROR: Recipe file does not exist: {recipe_path}")
+                return False
+
+            print(f"✅ Recipe file found")
+
+            # Read file contents
             with open(recipe_path, 'r') as f:
                 recipe_text = f.read().strip()
-                
+
+            print(f"📄 Raw recipe content: '{recipe_text}'")
+            print(f"📏 Content length: {len(recipe_text)} characters")
+
+            if not recipe_text:
+                print("⚠️  WARNING: Recipe file is empty")
+                self.recipe = {}
+                return True
+
             # Parse recipe format: "A,50:B,120"
+            print("🔍 Parsing recipe...")
             self.recipe = {}
-            if recipe_text:
-                pairs = recipe_text.split(':')
-                for pair in pairs:
-                    if ',' in pair:
-                        material, layer = pair.split(',')
-                        self.recipe[int(layer)] = material.strip()
-                        
-            print(f"Loaded recipe: {self.recipe}")
+            valid_materials = ['A', 'B', 'C', 'D']
+
+            pairs = recipe_text.split(':')
+            print(f"📋 Found {len(pairs)} recipe pairs: {pairs}")
+
+            for i, pair in enumerate(pairs):
+                pair_num = i + 1
+                print(f"   🔸 Processing pair {pair_num}: '{pair}'")
+
+                if ',' not in pair:
+                    print(f"   ⚠️  WARNING: Skipping invalid pair {pair_num} (no comma): '{pair}'")
+                    continue
+
+                try:
+                    material, layer_str = pair.split(',', 1)  # Split only on first comma
+                    material = material.strip().upper()
+                    layer_str = layer_str.strip()
+
+                    # Validate material
+                    if material not in valid_materials:
+                        print(f"   ❌ ERROR: Invalid material '{material}' in pair {pair_num}. Must be one of: {valid_materials}")
+                        continue
+
+                    # Validate layer number
+                    try:
+                        layer = int(layer_str)
+                        if layer <= 0:
+                            print(f"   ❌ ERROR: Invalid layer number '{layer}' in pair {pair_num}. Must be positive integer.")
+                            continue
+                    except ValueError:
+                        print(f"   ❌ ERROR: Invalid layer number '{layer_str}' in pair {pair_num}. Must be integer.")
+                        continue
+
+                    # Check for duplicate layers
+                    if layer in self.recipe:
+                        print(f"   ⚠️  WARNING: Duplicate layer {layer}. Overriding {self.recipe[layer]} with {material}")
+
+                    self.recipe[layer] = material
+                    print(f"   ✅ Added: Layer {layer} → Material {material}")
+
+                except Exception as e:
+                    print(f"   ❌ ERROR: Failed to parse pair {pair_num} '{pair}': {e}")
+                    continue
+
+            print("─" * 40)
+            print(f"📊 RECIPE PARSING COMPLETE")
+            print(f"✅ Successfully parsed {len(self.recipe)} material changes:")
+
+            if self.recipe:
+                for layer, material in sorted(self.recipe.items()):
+                    print(f"   📍 Layer {layer:>3} → Material {material}")
+
+                # Show sequence info
+                sorted_layers = sorted(self.recipe.keys())
+                print(f"🔢 Layer sequence: {sorted_layers}")
+                print(f"📏 Layer range: {min(sorted_layers)} to {max(sorted_layers)}")
+            else:
+                print("⚠️  WARNING: No valid material changes found in recipe")
+
+            print("=" * 40)
             return True
+
         except Exception as e:
-            print(f"Error loading recipe: {e}")
+            print(f"\n💥 CRITICAL ERROR loading recipe: {e}")
+            import traceback
+            print("📊 Full error traceback:")
+            traceback.print_exc()
+            print("❌ Recipe loading FAILED")
             return False
     
     def start_monitoring(self, recipe_path=None):
         """
         Start automated printer monitoring and material changes.
-        
+
         Args:
             recipe_path (str, optional): Recipe file to load
-            
+
         Polls printer every 5 seconds, triggers material changes at target layers.
         """
+        print("=" * 60)
+        print("MULTI-MATERIAL PRINT MANAGER STARTING")
+        print("=" * 60)
+
         if recipe_path and not self.load_recipe(recipe_path):
-            print("Failed to load recipe, aborting.")
+            print("❌ CRITICAL ERROR: Failed to load recipe, aborting.")
             return False
-            
+
         if not self.recipe:
-            print("No recipe loaded, monitoring only.")
-            
-        print(f"Starting print monitoring for printer at {self.printer_ip}")
-        print(f"Recipe: {self.recipe}")
-        
+            print("⚠️  WARNING: No recipe loaded, monitoring only (no material changes will occur).")
+        else:
+            print(f"✅ Recipe loaded successfully with {len(self.recipe)} material changes:")
+            for layer, material in sorted(self.recipe.items()):
+                print(f"   📍 Layer {layer} → Material {material}")
+
+        print(f"🖨️  Target printer: {self.printer_ip}:{self.printer_port}")
+        print(f"⏱️  Monitoring interval: 5 seconds")
+        print(f"⏰ Timeout setting: {self.timeout} seconds")
+        print("🔄 Starting continuous monitoring loop...")
+        print("=" * 60)
+
         try:
+            loop_count = 0
             while True:
+                loop_count += 1
+                print(f"\n🔍 Monitoring cycle #{loop_count} - {time.strftime('%H:%M:%S')}")
+
                 # Get current printer status
+                print("📡 Requesting printer status...")
                 status = self._get_printer_status()
                 if not status:
-                    print("Lost connection to printer")
+                    print("❌ ERROR: Lost connection to printer - retrying in 5 seconds")
                     time.sleep(5)
                     continue
-                    
+
+                print("✅ Printer status received")
+
+                # Extract current layer
                 current_layer = self._extract_current_layer(status)
                 if current_layer is None:
-                    print("Could not determine current layer")
+                    print("⚠️  WARNING: Could not determine current layer from status")
+                    print(f"📄 Raw status: {str(status)[:100]}...")
                     time.sleep(2)
                     continue
-                    
-                print(f"Current layer: {current_layer}")
-                
+
+                print(f"📐 Current layer: {current_layer}")
+
                 # Check if we need to change material
                 if current_layer in self.recipe:
                     material = self.recipe[current_layer]
-                    print(f"Material change needed at layer {current_layer}: {material}")
-                    
+                    print("\n" + "🚨" * 20)
+                    print(f"🔄 MATERIAL CHANGE TRIGGERED!")
+                    print(f"📍 Layer {current_layer}: Switching to material {material}")
+                    print("🚨" * 20)
+
                     if self._handle_material_change(material):
                         # Remove this change from recipe so we don't repeat it
                         del self.recipe[current_layer]
-                        print("Material change completed successfully")
+                        print("✅ Material change completed successfully")
+                        print(f"📋 Remaining changes: {len(self.recipe)}")
+                        if self.recipe:
+                            next_layer = min(self.recipe.keys())
+                            print(f"📍 Next change at layer {next_layer}")
                     else:
-                        print("Material change failed!")
-                        
+                        print("❌ CRITICAL ERROR: Material change failed!")
+                        print("🛑 Consider stopping the print to investigate")
+
+                else:
+                    # Show upcoming changes
+                    if self.recipe:
+                        upcoming = [layer for layer in self.recipe.keys() if layer > current_layer]
+                        if upcoming:
+                            next_change = min(upcoming)
+                            layers_until = next_change - current_layer
+                            print(f"⏳ Next material change in {layers_until} layers (layer {next_change})")
+
                 # Check if print is complete
                 if self._is_print_complete(status):
-                    print("Print completed!")
+                    print("\n" + "🎉" * 20)
+                    print("🏁 PRINT COMPLETED!")
+                    print("🎉" * 20)
                     break
-                    
+
+                print(f"⏸️  Waiting 5 seconds before next check...")
                 time.sleep(5)  # Check every 5 seconds
-                
+
         except KeyboardInterrupt:
-            print("Monitoring stopped by user")
+            print("\n🛑 MONITORING STOPPED BY USER")
+            print("👋 Print manager shutting down...")
         except Exception as e:
-            print(f"Error during monitoring: {e}")
+            print(f"\n💥 CRITICAL ERROR during monitoring: {e}")
+            import traceback
+            print("📊 Full error details:")
+            traceback.print_exc()
             
     def _get_printer_status(self):
         """Get current printer status via uart-wifi."""
@@ -201,32 +324,61 @@ class PrintManager:
     def _handle_material_change(self, material):
         """
         Execute material change: pause -> change -> resume.
-        
+
         Args:
             material (str): Target material (A, B, C, D)
-            
+
         Returns:
             bool: True if successful
         """
         try:
-            print(f"Starting material change to: {material}")
-            
+            print(f"\n🔧 STARTING MATERIAL CHANGE SEQUENCE")
+            print(f"🎯 Target material: {material}")
+            print(f"⏰ Started at: {time.strftime('%H:%M:%S')}")
+            print("─" * 50)
+
             # 1. Pause the printer
+            print("🛑 Step 1/3: Pausing printer...")
             if not self._pause_printer():
+                print("❌ FAILED: Could not pause printer")
+                print("🚨 ABORTING material change sequence")
                 return False
-                
+            print("✅ Printer paused successfully")
+
             # 2. Run material change pumps
+            print(f"🔄 Step 2/3: Executing pump sequence for material {material}...")
+            print("📡 Sending commands to MMU controller...")
+
             success = mmu_control.change_material(material)
-            
-            # 3. Resume the printer
+
             if success:
-                return self._resume_printer()
+                print("✅ Pump sequence completed successfully")
             else:
-                print("Material change failed, not resuming")
+                print("❌ FAILED: Pump sequence failed")
+                print("🚨 Material change unsuccessful - check pump hardware")
+                print("⚠️  NOT resuming printer due to failed material change")
                 return False
-                
+
+            # 3. Resume the printer
+            print("▶️  Step 3/3: Resuming printer...")
+            if self._resume_printer():
+                print("✅ Printer resumed successfully")
+                print("🎉 MATERIAL CHANGE SEQUENCE COMPLETED")
+                print(f"⏰ Finished at: {time.strftime('%H:%M:%S')}")
+                print("─" * 50)
+                return True
+            else:
+                print("❌ FAILED: Could not resume printer")
+                print("🚨 CRITICAL: Printer is paused but material change completed")
+                print("🛠️  Manual intervention required to resume printing")
+                return False
+
         except Exception as e:
-            print(f"Error during material change: {e}")
+            print(f"\n💥 EXCEPTION during material change: {e}")
+            import traceback
+            print("📊 Full error traceback:")
+            traceback.print_exc()
+            print("🚨 Material change sequence FAILED due to exception")
             return False
             
     def _pause_printer(self):
@@ -246,7 +398,7 @@ class PrintManager:
             return False
             
     def _is_print_complete(self, status):
-        """Check if print is complete based on status.""\
+        """Check if print is complete based on status."""
         # Implementation depends on your printer's status format
         return "complete" in status.lower() if status else False
 
