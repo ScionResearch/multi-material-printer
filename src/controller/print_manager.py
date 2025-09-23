@@ -302,23 +302,59 @@ class PrintManager:
     def _extract_current_layer(self, status):
         """
         Extract current layer from status response.
-        
+
         Args:
             status (str): Status response
-            
+
         Returns:
             int: Layer number or None if parsing fails
         """
         try:
-            # This needs to be implemented based on your printer's response format
-            # For now, return a placeholder
-            if "layer" in status.lower():
-                # Extract layer number from status string
-                # Implementation depends on your printer's status format
-                pass
+            print(f"🔍 Extracting layer from status...")
+
+            # Convert status object to string if needed
+            status_str = str(status)
+            print(f"📄 Full status string: {status_str}")
+
+            # Look for current_layer field in the status
+            import re
+
+            # Try multiple patterns to find current layer
+            patterns = [
+                r'current_layer:\s*(\d+)',        # current_layer: 123
+                r'current_lay[er]*:\s*(\d+)',     # current_lay: 123 (truncated)
+                r'layer:\s*(\d+)',                # layer: 123
+                r'current_layer\s*=\s*(\d+)',     # current_layer = 123
+                r'current_layer":\s*(\d+)',       # "current_layer": 123
+            ]
+
+            for pattern in patterns:
+                match = re.search(pattern, status_str, re.IGNORECASE)
+                if match:
+                    layer_num = int(match.group(1))
+                    print(f"✅ Found current layer using pattern '{pattern}': {layer_num}")
+                    return layer_num
+
+            # If no pattern matches, try to find any number after "current" or "layer"
+            current_match = re.search(r'current.*?(\d+)', status_str, re.IGNORECASE)
+            if current_match:
+                layer_num = int(current_match.group(1))
+                print(f"✅ Found layer using 'current' pattern: {layer_num}")
+                return layer_num
+
+            # Check if printer status shows it hasn't started printing yet
+            if "percent_complete: 0" in status_str and ("status: print" in status_str or "status: printing" in status_str):
+                print("📍 Print just started - assuming layer 1")
+                return 1
+
+            print("❌ Could not extract layer number from status")
+            print(f"📋 Tried patterns: {patterns}")
             return None
+
         except Exception as e:
-            print(f"Error extracting layer: {e}")
+            print(f"💥 Error extracting layer: {e}")
+            import traceback
+            traceback.print_exc()
             return None
             
     def _handle_material_change(self, material):
