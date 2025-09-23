@@ -122,20 +122,12 @@ class MMUController:
             # Step 3: Allow mixing time
             print(f"Mixing phase - waiting {mixing_time}s...")
             import time
-            for i in range(mixing_time):
-                remaining = mixing_time - i
-                if remaining % 2 == 0 and remaining > 0:  # Print every 2 seconds
-                    pass  # Removed countdown logging
-                time.sleep(1)
+            time.sleep(mixing_time)
             print("Mixing phase completed")
 
             # Step 4: Settle time
             print(f"Settling phase - waiting {settle_time}s...")
-            for i in range(settle_time):
-                remaining = settle_time - i
-                if remaining > 0:
-                    pass  # Removed countdown logging
-                time.sleep(1)
+            time.sleep(settle_time)
             print("Settling phase completed")
 
             print(f"MATERIAL CHANGE TO {target_material} COMPLETED SUCCESSFULLY")
