@@ -160,12 +160,21 @@ class PrinterCommunicator:
     def resume_print(self):
         """
         Resume paused print job.
-        
+
         Returns:
             bool: True if successful
         """
-        response = self._run_printer_command('goresume')
-        return response is not None
+        try:
+            response = self._run_printer_command('goresume')
+            # Check if response contains error message about unrecognized command
+            if response and "unrecognized command" in str(response).lower():
+                print(f"WARNING: Printer reports unrecognized command, but got response: {response}")
+                # Still return True if we get "goresume,OK" response
+                return "ok" in str(response).lower()
+            return response is not None
+        except Exception as e:
+            print(f"ERROR in resume_print: {e}")
+            return False
     
     def stop_print(self):
         """

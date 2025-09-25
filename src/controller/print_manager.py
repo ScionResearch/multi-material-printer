@@ -246,10 +246,12 @@ class PrintManager:
 
         except KeyboardInterrupt:
             print("\nMonitoring stopped by user")
+            return True  # Clean exit
         except Exception as e:
             print(f"\nCRITICAL ERROR: {e}")
             import traceback
             traceback.print_exc()
+            return False  # Error exit
             
     def _get_printer_status(self):
         """Get current printer status via uart-wifi."""
@@ -357,30 +359,30 @@ class PrintManager:
         try:
             print(f"Starting material change to {material}...")
 
-            # 1. Pause the printer
             # Step 1: Pause printer
+            print("Step 1: Pausing printer...")
             if not self._pause_printer():
                 print("ERROR: Could not pause printer")
                 return False
 
-            # Wait for bed to rise after pause
-            # Wait for bed to rise
-            time.sleep(3)  # Wait for bed to reach top position
+            # Step 2: Wait for bed to rise after pause
+            print("Step 2: Waiting for bed to rise to top position...")
+            time.sleep(5)  # Extended wait for bed to reach top position
 
-            # 2. Run material change pumps
-            # Step 2: Execute pump sequence
-
+            # Step 3: Execute material change pumps
+            print("Step 3: Starting material change pumps...")
             success = mmu_control.change_material(material)
 
             if success:
-                pass  # Pump sequence completed
+                print("✓ Pump sequence completed successfully")
             else:
                 print("ERROR: Pump sequence failed - NOT resuming printer")
                 return False
 
-            # Step 3: Resume printer
+            # Step 4: Resume printer
+            print("Step 4: Resuming printer...")
             if self._resume_printer():
-                print(f"Material change to {material} completed")
+                print(f"✓ Material change to {material} completed successfully")
                 return True
             else:
                 print("ERROR: Could not resume printer - manual intervention required")
@@ -484,7 +486,16 @@ def main():
         
     # Start monitoring
     recipe_path = args.recipe or manager._find_config_path().parent / 'recipe.txt'
-    manager.start_monitoring(recipe_path)
+    success = manager.start_monitoring(recipe_path)
+
+    # Exit with appropriate code
+    import sys
+    if success:
+        print("Print manager completed successfully")
+        sys.exit(0)
+    else:
+        print("Print manager exited with errors")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

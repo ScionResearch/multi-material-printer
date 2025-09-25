@@ -221,14 +221,19 @@ void Dialog::on_stopPr_clicked()
     if (error.isEmpty())
     {
        QString result = QString::fromUtf8(output);
-       QMessageBox::information(this, "Python Command Result", result);
+       if (result.trimmed().isEmpty()) {
+           result = "Stop command sent successfully (no response from printer)";
+       }
+       QMessageBox::information(this, "Stop Printer Result", QString("Stop printer command executed.\n\nResponse: %1").arg(result));
+       ui->textBrowser->append("=== STOP PRINTER ===");
        ui->textBrowser->append(result);
+       ui->textBrowser->append("=== END STOP ===");
     }
     else
     {
        QString errorMessage = QString::fromUtf8(error);
-       QMessageBox::critical(this, "Python Command Error", errorMessage);
-       ui->textBrowser->append(errorMessage);
+       QMessageBox::critical(this, "Stop Printer Error", QString("Failed to stop printer.\n\nError: %1").arg(errorMessage));
+       ui->textBrowser->append("ERROR: " + errorMessage);
    }
 
 }
