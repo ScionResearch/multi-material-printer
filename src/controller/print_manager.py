@@ -554,9 +554,23 @@ def main():
     Monitors printer via uart-wifi and triggers material changes at specified layers.
     """
     import sys
-    print("=== PRINT MANAGER STARTUP ===")
-    print(f"Python path: {sys.path}")
-    print(f"Working directory: {os.getcwd()}")
+    try:
+        print("DEBUG: main() function started")
+        sys.stdout.flush()
+
+        print("=== PRINT MANAGER STARTUP ===")
+        print(f"Python path: {sys.path}")
+        print(f"Working directory: {os.getcwd()}")
+
+        print("DEBUG: About to parse arguments...")
+        sys.stdout.flush()
+
+    except Exception as e:
+        print(f"CRASH in main() startup: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.exit(15)
 
     try:
         print("Step 1: Parsing arguments...")
