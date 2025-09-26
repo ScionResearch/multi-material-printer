@@ -512,6 +512,7 @@ def main():
 
     Monitors printer via uart-wifi and triggers material changes at specified layers.
     """
+    import sys
     print("=== PRINT MANAGER STARTUP ===")
     print(f"Python path: {sys.path}")
     print(f"Working directory: {os.getcwd()}")
@@ -545,7 +546,6 @@ def main():
         success = manager.start_monitoring(recipe_path)
 
         # Exit with appropriate code
-        import sys
         if success:
             print("Print manager completed successfully")
             sys.exit(0)
@@ -559,7 +559,6 @@ def main():
         import traceback
         print("Traceback:")
         traceback.print_exc()
-        import sys
         sys.exit(15)
 
 
