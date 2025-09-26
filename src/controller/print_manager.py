@@ -507,37 +507,60 @@ class PrintManager:
 def main():
     """
     Command-line interface for automated multi-material printing.
-    
+
     Usage: python print_manager.py [-r recipe.txt] [-c config.ini] [-i printer_ip]
-    
+
     Monitors printer via uart-wifi and triggers material changes at specified layers.
     """
-    parser = argparse.ArgumentParser(description='Multi-Material Print Manager')
-    parser.add_argument('--recipe', '-r', help='Path to recipe file')
-    parser.add_argument('--config', '-c', help='Path to config file')
-    parser.add_argument('--printer-ip', '-i', help='Printer IP address override')
-    
-    args = parser.parse_args()
-    
-    # Create print manager
-    manager = PrintManager(args.config)
-    
-    # Override printer IP if provided
-    if args.printer_ip:
-        manager.printer_ip = args.printer_ip
-        
-    # Start monitoring
-    recipe_path = args.recipe or manager._find_config_path().parent / 'recipe.txt'
-    success = manager.start_monitoring(recipe_path)
+    print("=== PRINT MANAGER STARTUP ===")
+    print(f"Python path: {sys.path}")
+    print(f"Working directory: {os.getcwd()}")
 
-    # Exit with appropriate code
-    import sys
-    if success:
-        print("Print manager completed successfully")
-        sys.exit(0)
-    else:
-        print("Print manager exited with errors")
-        sys.exit(1)
+    try:
+        print("Step 1: Parsing arguments...")
+        parser = argparse.ArgumentParser(description='Multi-Material Print Manager')
+        parser.add_argument('--recipe', '-r', help='Path to recipe file')
+        parser.add_argument('--config', '-c', help='Path to config file')
+        parser.add_argument('--printer-ip', '-i', help='Printer IP address override')
+
+        args = parser.parse_args()
+        print(f"Arguments: recipe={args.recipe}, config={args.config}, printer_ip={args.printer_ip}")
+
+        print("Step 2: Creating print manager...")
+        manager = PrintManager(args.config)
+        print("✓ Print manager created successfully")
+
+        print("Step 3: Setting printer IP...")
+        if args.printer_ip:
+            manager.printer_ip = args.printer_ip
+            print(f"✓ Printer IP set to: {args.printer_ip}")
+        else:
+            print(f"✓ Using default printer IP: {manager.printer_ip}")
+
+        print("Step 4: Resolving recipe path...")
+        recipe_path = args.recipe or manager._find_config_path().parent / 'recipe.txt'
+        print(f"✓ Recipe path: {recipe_path}")
+
+        print("Step 5: Starting monitoring...")
+        success = manager.start_monitoring(recipe_path)
+
+        # Exit with appropriate code
+        import sys
+        if success:
+            print("Print manager completed successfully")
+            sys.exit(0)
+        else:
+            print("Print manager exited with errors")
+            sys.exit(1)
+
+    except Exception as e:
+        print(f"FATAL ERROR in print_manager main(): {e}")
+        print(f"Error type: {type(e).__name__}")
+        import traceback
+        print("Traceback:")
+        traceback.print_exc()
+        import sys
+        sys.exit(15)
 
 
 if __name__ == "__main__":
