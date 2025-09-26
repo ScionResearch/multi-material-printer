@@ -241,13 +241,20 @@ class PrintManager:
             loop_count = 0
             while True:
                 loop_count += 1
+
+                # CRITICAL: Force output flush on every iteration for GUI visibility
+                sys.stdout.flush()
+                sys.stderr.flush()
+
                 if loop_count % 10 == 1:  # Log every 10th cycle
-                    print(f"\nMonitoring cycle #{loop_count} - {time.strftime('%H:%M:%S')}")
+                    print(f"\n[MONITOR] Cycle #{loop_count} - {time.strftime('%H:%M:%S')}")
+                    sys.stdout.flush()
 
                 # Get current printer status
                 status = self._get_printer_status()
                 if not status:
-                    print("ERROR: Lost connection to printer - retrying in 5 seconds")
+                    print("[MONITOR] ERROR: Lost connection to printer - retrying in 5 seconds")
+                    sys.stdout.flush()
                     time.sleep(5)
                     continue
 
@@ -255,29 +262,37 @@ class PrintManager:
                 current_layer = self._extract_current_layer(status)
                 if current_layer is None:
                     if loop_count % 20 == 1:  # Only show warning every 20 cycles
-                        print("WARNING: Could not determine current layer")
+                        print("[MONITOR] WARNING: Could not determine current layer")
+                        sys.stdout.flush()
                     time.sleep(2)
                     continue
 
                 if loop_count % 5 == 1:  # Show layer every 5 cycles
-                    print(f"Current layer: {current_layer}")
+                    print(f"[MONITOR] Current layer: {current_layer}")
+                    sys.stdout.flush()
 
                 # Check if we need to change material (only if not already processed this layer)
-                print(f"DEBUG: Checking layer {current_layer} for material change. Recipe layers: {list(self.recipe.keys())}")
+                print(f"[MONITOR] Checking layer {current_layer} for material change. Recipe layers: {list(self.recipe.keys())}")
+                sys.stdout.flush()
+
                 if current_layer in self.recipe and (not hasattr(self, '_last_processed_layer') or current_layer != getattr(self, '_last_processed_layer', -1)):
                     material = self.recipe[current_layer]
-                    print(f"\nMATERIAL CHANGE TRIGGERED: Layer {current_layer} → Material {material}")
+                    print(f"\n[MATERIAL CHANGE] TRIGGERED: Layer {current_layer} → Material {material}")
+                    sys.stdout.flush()
 
                     if self._handle_material_change(material):
                         # Mark this layer as processed and remove from recipe
                         self._last_processed_layer = current_layer
                         del self.recipe[current_layer]
-                        print(f"Material change completed. Remaining: {len(self.recipe)}")
+                        print(f"[MATERIAL CHANGE] Completed. Remaining: {len(self.recipe)}")
+                        sys.stdout.flush()
                         if self.recipe:
                             next_layer = min(self.recipe.keys())
-                            print(f"Next change at layer {next_layer}")
+                            print(f"[MATERIAL CHANGE] Next change at layer {next_layer}")
+                            sys.stdout.flush()
                     else:
-                        print("ERROR: Material change failed!")
+                        print("[MATERIAL CHANGE] ERROR: Material change failed!")
+                        sys.stdout.flush()
                         # Mark layer as processed even if failed to prevent repeated attempts
                         self._last_processed_layer = current_layer
 
@@ -288,11 +303,13 @@ class PrintManager:
                         if upcoming:
                             next_change = min(upcoming)
                             layers_until = next_change - current_layer
-                            print(f"Next change in {layers_until} layers (layer {next_change})")
+                            print(f"[MONITOR] Next change in {layers_until} layers (layer {next_change})")
+                            sys.stdout.flush()
 
                 # Check if print is complete
                 if self._is_print_complete(status):
-                    print("\nPRINT COMPLETED!")
+                    print("\n[MONITOR] PRINT COMPLETED!")
+                    sys.stdout.flush()
                     break
 
                 # Wait 5 seconds (no log spam)
@@ -411,26 +428,33 @@ class PrintManager:
             bool: True if successful
         """
         try:
-            print(f"Starting material change to {material}...")
+            print(f"[MATERIAL CHANGE] Starting material change to {material}...")
+            sys.stdout.flush()
 
             # Step 1: Pause printer
-            print("Step 1: Pausing printer...")
+            print("[MATERIAL CHANGE] Step 1: Pausing printer...")
+            sys.stdout.flush()
             if not self._pause_printer():
-                print("ERROR: Could not pause printer")
+                print("[MATERIAL CHANGE] ERROR: Could not pause printer")
+                sys.stdout.flush()
                 return False
 
             # Step 2: Wait for bed to rise after pause
-            print("Step 2: Ensuring bed is in raised position...")
+            print("[MATERIAL CHANGE] Step 2: Ensuring bed is in raised position...")
+            sys.stdout.flush()
             self._wait_for_bed_raised()
 
             # Step 3: Execute material change pumps
-            print("Step 3: Starting material change pumps...")
+            print("[MATERIAL CHANGE] Step 3: Starting material change pumps...")
+            sys.stdout.flush()
             success = mmu_control.change_material(material)
 
             if success:
-                print("✓ Pump sequence completed successfully")
+                print("[MATERIAL CHANGE] ✓ Pump sequence completed successfully")
+                sys.stdout.flush()
             else:
-                print("ERROR: Pump sequence failed - NOT resuming printer")
+                print("[MATERIAL CHANGE] ERROR: Pump sequence failed - NOT resuming printer")
+                sys.stdout.flush()
                 return False
 
             # Step 4: Resume printer
