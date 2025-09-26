@@ -32,6 +32,9 @@ mmu_control = None
 printer_comms = None
 
 print("DEBUG: Attempting to import controller modules...")
+print(f"DEBUG: Current working directory: {os.getcwd()}")
+print(f"DEBUG: Script location: {__file__}")
+print(f"DEBUG: Python path: {sys.path}")
 
 try:
     # Try relative imports first (package mode)
@@ -62,7 +65,14 @@ except ImportError as e:
             print(f"  Current working directory: {os.getcwd()}")
             print(f"  Script directory: {Path(__file__).parent}")
             print(f"  Python path: {sys.path}")
+
+            # Force flush output before exiting
+            sys.stdout.flush()
+            sys.stderr.flush()
             raise ImportError("Could not import required controller modules") from e3
+
+print("DEBUG: Import section completed successfully")
+sys.stdout.flush()
 
 class PrintManager:
     """
