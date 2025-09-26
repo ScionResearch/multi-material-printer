@@ -224,12 +224,99 @@ class PrinterCommunicator:
     def is_connected(self):
         """
         Test printer connectivity.
-        
+
         Returns:
             bool: True if printer responds
         """
         status = self.get_status()
         return status is not None and len(status) > 0
+
+    def discover_printer_ip(self, network_base="192.168.4", timeout=2):
+        """
+        Automatically discover printer IP address by scanning network.
+
+        Args:
+            network_base (str): Base network to scan (default: "192.168.4")
+            timeout (int): Timeout per IP test (seconds)
+
+        Returns:
+            str: Discovered printer IP or None if not found
+        """
+        import concurrent.futures
+        import socket
+
+        print(f"Scanning {network_base}.1-254 for Anycubic printer...")
+
+        def test_printer_at_ip(ip):
+            """Test if a printer responds at given IP address."""
+            try:
+                # First check if port is open
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(timeout)
+                result = sock.connect_ex((ip, self.printer_port))
+                sock.close()
+
+                if result != 0:
+                    return None  # Port not open
+
+                # Test printer communication
+                old_ip = self.printer_ip
+                self.printer_ip = ip
+
+                try:
+                    status = self.get_status()
+                    if status and len(status) > 0:
+                        print(f"✓ Found printer at {ip}")
+                        return ip
+                except Exception:
+                    pass
+                finally:
+                    self.printer_ip = old_ip
+
+            except Exception:
+                pass
+
+            return None
+
+        # Generate IP range to test (skip .1 which is gateway)
+        test_ips = [f"{network_base}.{i}" for i in range(2, 255)]
+
+        # Use threading to speed up discovery
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_ip = {executor.submit(test_printer_at_ip, ip): ip for ip in test_ips}
+
+            for future in concurrent.futures.as_completed(future_to_ip):
+                result = future.result()
+                if result:
+                    # Cancel remaining futures
+                    for f in future_to_ip:
+                        f.cancel()
+                    return result
+
+        print("No printer found on network")
+        return None
+
+    def auto_connect(self):
+        """
+        Automatically find and connect to printer.
+        Updates self.printer_ip if printer is discovered.
+
+        Returns:
+            bool: True if printer found and connected
+        """
+        # First try configured IP
+        if self.is_connected():
+            print(f"✓ Printer already connected at {self.printer_ip}")
+            return True
+
+        # Try to discover printer
+        discovered_ip = self.discover_printer_ip()
+        if discovered_ip:
+            self.printer_ip = discovered_ip
+            print(f"✓ Auto-discovered printer at {self.printer_ip}")
+            return True
+
+        return False
 
 
 # Global instance for easy access
@@ -285,36 +372,88 @@ def start_print(filename, printer_ip=None):
         comm.printer_ip = printer_ip
     return comm.start_print(filename)
 
+def discover_printer(network_base="192.168.4"):
+    """Discover printer IP on network (convenience function)."""
+    comm = get_communicator()
+    return comm.discover_printer_ip(network_base)
+
+def auto_connect_printer():
+    """Auto-discover and connect to printer (convenience function)."""
+    comm = get_communicator()
+    return comm.auto_connect()
+
 
 if __name__ == "__main__":
     """
     Command-line interface for printer communication testing.
-    
-    Usage: python printer_comms.py -i <printer_ip> -c <command>
-    
+
+    Usage:
+        python printer_comms.py -i <printer_ip> -c <command>
+        python printer_comms.py --discover                    # Find printer automatically
+        python printer_comms.py --auto-connect              # Connect to discovered printer
+
     Commands: getstatus, gopause, goresume, gostop,end, getfile, getmode
     """
     import sys
-    
+
+    # Handle discovery commands
+    if '--discover' in sys.argv:
+        discovered_ip = discover_printer()
+        if discovered_ip:
+            print(f"Printer found at: {discovered_ip}")
+            sys.exit(0)
+        else:
+            print("No printer found")
+            sys.exit(1)
+
+    if '--auto-connect' in sys.argv:
+        if auto_connect_printer():
+            comm = get_communicator()
+            print(f"Connected to printer at: {comm.printer_ip}")
+            # Test with status command
+            status = comm.get_status()
+            print(f"Status: {status}")
+            sys.exit(0)
+        else:
+            print("Failed to connect to printer")
+            sys.exit(1)
+
+    # Handle manual IP and command
+    printer_ip = None
+    command = None
+
     if len(sys.argv) >= 3:
         # python printer_comms.py -i 192.168.4.2 -c getstatus
         if '-i' in sys.argv:
             ip_index = sys.argv.index('-i') + 1
             if ip_index < len(sys.argv):
                 printer_ip = sys.argv[ip_index]
-        
+
         if '-c' in sys.argv:
             cmd_index = sys.argv.index('-c') + 1
             if cmd_index < len(sys.argv):
                 command = sys.argv[cmd_index]
-                
-                comm = PrinterCommunicator()
-                comm.printer_ip = printer_ip
-                response = comm._run_printer_command(command)
-                if response:
-                    print(response)
+
+                if printer_ip:
+                    comm = PrinterCommunicator()
+                    comm.printer_ip = printer_ip
+                    response = comm._run_printer_command(command)
+                    if response:
+                        print(response)
+                    else:
+                        print("Command failed")
                 else:
-                    print("Command failed")
+                    print("Error: -i flag required with -c flag")
     else:
-        print("Usage: python printer_comms.py -i <ip> -c <command>")
-        print("Example: python printer_comms.py -i 192.168.4.2 -c getstatus")
+        print("Printer Communication Tool")
+        print("Usage:")
+        print("  python printer_comms.py -i <ip> -c <command>")
+        print("  python printer_comms.py --discover")
+        print("  python printer_comms.py --auto-connect")
+        print()
+        print("Examples:")
+        print("  python printer_comms.py -i 192.168.4.3 -c getstatus")
+        print("  python printer_comms.py --discover")
+        print("  python printer_comms.py --auto-connect")
+        print()
+        print("Commands: getstatus, gopause, goresume, gostop,end, getfiles, getmode")
