@@ -574,13 +574,37 @@ def main():
 
     try:
         print("Step 1: Parsing arguments...")
-        parser = argparse.ArgumentParser(description='Multi-Material Print Manager')
-        parser.add_argument('--recipe', '-r', help='Path to recipe file')
-        parser.add_argument('--config', '-c', help='Path to config file')
-        parser.add_argument('--printer-ip', '-i', help='Printer IP address override')
+        sys.stdout.flush()
 
-        args = parser.parse_args()
+        try:
+            parser = argparse.ArgumentParser(description='Multi-Material Print Manager')
+            print("DEBUG: ArgumentParser created")
+            sys.stdout.flush()
+
+            parser.add_argument('--recipe', '-r', help='Path to recipe file')
+            parser.add_argument('--config', '-c', help='Path to config file')
+            parser.add_argument('--printer-ip', '-i', help='Printer IP address override')
+            print("DEBUG: Arguments defined")
+            sys.stdout.flush()
+
+            args = parser.parse_args()
+            print("DEBUG: Arguments parsed successfully")
+            sys.stdout.flush()
+
+        except SystemExit as e:
+            print(f"DEBUG: ArgumentParser SystemExit: {e}")
+            print(f"DEBUG: Exit code: {e.code}")
+            # Don't re-raise SystemExit, handle gracefully
+            sys.exit(e.code)
+        except Exception as e:
+            print(f"DEBUG: Exception during argument parsing: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
+            raise
+
         print(f"Arguments: recipe={args.recipe}, config={args.config}, printer_ip={args.printer_ip}")
+        sys.stdout.flush()
 
         print("Step 2: Creating print manager...")
         manager = PrintManager(args.config)
