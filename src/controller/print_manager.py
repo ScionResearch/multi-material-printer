@@ -607,8 +607,23 @@ def main():
         sys.stdout.flush()
 
         print("Step 2: Creating print manager...")
-        manager = PrintManager(args.config)
+        sys.stdout.flush()
+
+        try:
+            print("DEBUG: About to call PrintManager constructor")
+            sys.stdout.flush()
+            manager = PrintManager(args.config)
+            print("DEBUG: PrintManager constructor completed")
+            sys.stdout.flush()
+        except Exception as e:
+            print(f"DEBUG: PrintManager constructor crashed: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
+            raise
+
         print("✓ Print manager created successfully")
+        sys.stdout.flush()
 
         print("Step 3: Setting printer IP...")
         if args.printer_ip:
