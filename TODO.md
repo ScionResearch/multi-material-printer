@@ -37,9 +37,33 @@
   - ✅ Should eliminate mysterious exit code 15 errors
   - Location: `print_manager.py:487-498` - `main()` function
 
-## 🔍 INVESTIGATION TASKS
+## 🔍 ACTIVE ISSUES - September 26, 2025
 
-### Error Analysis
+### GUI Enhancement & Logging Issues
+- [ ] **Improve GUI logging for better troubleshooting**
+  - Need real-time pump status visibility in GUI output
+  - Replace annoying *** command sections with cleaner formatting
+  - Add better visual separation of log sections
+  - Show pump operations (drain/fill) in GUI output stream
+
+- [ ] **Fix goresume command error (continues to work despite error)**
+  - "ERROR: unrecognized command: goresume" followed by "goresume,OK"
+  - Command works but shows confusing error - investigate timing or protocol issue
+  - May be related to printer pause/resume bed positioning problems
+
+- [ ] **Bed positioning during material changes**
+  - Bed stays down during pause (normally raises in standard prints)
+  - Drain pump runs with bed down
+  - Fill pump runs with bed down
+  - Bed finally rises while pump still running (printer still paused)
+  - Print resumes after pump finishes - sequence seems wrong
+
+- [ ] **Add automatic status polling to GUI**
+  - Eliminate need to manually click "Check Status" repeatedly
+  - Show short status updates every few seconds during printing
+  - Don't need full status dump - just key info (layer, status, progress)
+
+### Investigation Tasks
 - [x] **Analyze print manager logs for error patterns**
   - ✅ Reviewed complete log output for error sequence
   - ✅ Identified exit code 15 caused by unhandled exceptions in main()
@@ -72,19 +96,26 @@
 
 ## 📋 COMPLETION CRITERIA
 
-- [ ] Material changes execute with proper bed positioning
-- [ ] No "unrecognized command" errors in logs
-- [ ] Stop printer popup displays correctly
-- [ ] Print manager exits cleanly (exit code 0)
-- [ ] Complete print workflow functions without errors
+- [ ] **GUI Improvements:**
+  - [ ] Real-time pump status visible in GUI output
+  - [ ] Clean log formatting (no *** sections)
+  - [ ] Automatic status polling every few seconds
+  - [ ] Short status display (layer, status, progress only)
+
+- [ ] **Print Process:**
+  - [ ] Material changes execute with proper bed positioning
+  - [ ] Bed raises immediately on pause (before pump operations)
+  - [ ] Pump sequence runs with bed in raised position
+  - [ ] Print resumes cleanly after material change
+
+- [ ] **Error Resolution:**
+  - [ ] No "unrecognized command: goresume" errors
+  - [ ] Print manager exits cleanly (exit code 0)
+  - [ ] Complete print workflow functions without errors
 
 ## 🔧 TECHNICAL NOTES
 
-**From NOTES.md Analysis:**
-- Printer IP: 192.168.4.4
-- Test file: "1.pwmb: 16mm base - Part 1.pwmb"
-- Print manager script: `src/controller/print_manager.py`
-- Recipe config: `config/recipe.txt`
+
 
 **Error Pattern:**
 ```
