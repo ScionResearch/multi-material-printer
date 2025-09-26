@@ -27,14 +27,42 @@ import os
 import sys
 from pathlib import Path
 
-# Import other controller modules
+# Import other controller modules with robust error handling
+mmu_control = None
+printer_comms = None
+
+print("DEBUG: Attempting to import controller modules...")
+
 try:
+    # Try relative imports first (package mode)
     from . import mmu_control
     from . import printer_comms
-except ImportError:
-    # Fallback for direct execution
-    import mmu_control
-    import printer_comms
+    print("DEBUG: ✓ Relative imports successful")
+except ImportError as e:
+    print(f"DEBUG: Relative import failed: {e}")
+    try:
+        # Try absolute imports (direct execution mode)
+        import mmu_control
+        import printer_comms
+        print("DEBUG: ✓ Absolute imports successful")
+    except ImportError as e2:
+        print(f"DEBUG: Absolute import failed: {e2}")
+        try:
+            # Try adding current directory to path
+            script_dir = Path(__file__).parent
+            sys.path.insert(0, str(script_dir))
+            import mmu_control
+            import printer_comms
+            print("DEBUG: ✓ Path-adjusted imports successful")
+        except ImportError as e3:
+            print(f"FATAL: All import methods failed!")
+            print(f"  Relative import error: {e}")
+            print(f"  Absolute import error: {e2}")
+            print(f"  Path-adjusted import error: {e3}")
+            print(f"  Current working directory: {os.getcwd()}")
+            print(f"  Script directory: {Path(__file__).parent}")
+            print(f"  Python path: {sys.path}")
+            raise ImportError("Could not import required controller modules") from e3
 
 class PrintManager:
     """
