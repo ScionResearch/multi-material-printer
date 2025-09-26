@@ -15,6 +15,7 @@
 #include <QProcessEnvironment>
 #include <QInputDialog>
 #include <QStringList>
+#include <QDateTime>
 
 Dialog::Dialog(QWidget *parent)
     : QDialog(parent), ui(new Ui::Dialog), pythonProcess(nullptr), statusTimer(nullptr)
@@ -87,6 +88,13 @@ void Dialog::updateConnectionStatus()
 
 }
 
+void Dialog::logMessage(const QString &tag, const QString &message)
+{
+    QString timestamp = QDateTime::currentDateTime().toString("hh:mm:ss");
+    QString logEntry = QString("[%1] %2: %3").arg(timestamp, tag, message);
+    ui->textBrowser->append(logEntry);
+}
+
 void Dialog::autoStatusUpdate()
 {
     QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
@@ -120,11 +128,11 @@ void Dialog::autoStatusUpdate()
             }
 
             if (!status.isEmpty()) {
-                QString shortStatus = QString("[AUTO] Status: %1 | Layer: %2 | Progress: %3%")
+                QString shortStatus = QString("Status: %1 | Layer: %2 | Progress: %3%")
                     .arg(status.toUpper())
                     .arg(layer.isEmpty() ? "0" : layer)
                     .arg(progress.isEmpty() ? "0" : progress);
-                ui->textBrowser->append(shortStatus);
+                logMessage("AUTO", shortStatus);
                 ui->statusLabel->setText(QString("Status: %1").arg(status.toUpper()));
             }
         }
@@ -156,30 +164,35 @@ void Dialog::on_startPr_clicked()
 
     if (!pythonProcess)
     {
-        ui->textBrowser->append("=== STARTING MULTI-MATERIAL PRINT MANAGER ===");
-        ui->textBrowser->append(QString("Recipe: %1").arg(recipePath));
-        ui->textBrowser->append(QString("Script: %1").arg(scriptPath));
-        ui->textBrowser->append(QString("Printer IP: %1").arg(printerIP));
+        logMessage("INIT", "Starting multi-material print manager");
+        logMessage("INIT", QString("Recipe: %1").arg(QFileInfo(recipePath).fileName()));
+        logMessage("INIT", QString("Printer IP: %1").arg(printerIP));
 
         pythonProcess = new QProcess(this);
         connect(pythonProcess, &QProcess::readyReadStandardOutput, this, [this]() {
             QString output = pythonProcess->readAllStandardOutput();
-            ui->textBrowser->append(output);
+            // Add timestamps to each line from Python output
+            QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+            for (const QString &line : lines) {
+                if (!line.trimmed().isEmpty()) {
+                    logMessage("PRINT", line.trimmed());
+                }
+            }
         });
 
         connect(pythonProcess, &QProcess::readyReadStandardError, this, [this]() {
             QString error = pythonProcess->readAllStandardError();
             if (!error.isEmpty()) {
-                ui->textBrowser->append("ERROR: " + error);
+                logMessage("ERROR", error.trimmed());
             }
         });
 
         connect(pythonProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                 this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
-            ui->textBrowser->append("=== PRINT MANAGER FINISHED ===");
-            ui->textBrowser->append(QString("Exit code: %1").arg(exitCode));
-            if (exitCode != 0) {
-                ui->textBrowser->append("Print manager exited with error");
+            if (exitCode == 0) {
+                logMessage("FINISH", "Print manager completed successfully");
+            } else {
+                logMessage("FINISH", QString("Print manager exited with error (code %1)").arg(exitCode));
             }
             // Stop auto status polling when print manager finishes
             statusTimer->stop();
@@ -187,7 +200,7 @@ void Dialog::on_startPr_clicked()
     }
     else
     {
-        ui->textBrowser->append("Stopping existing print manager...");
+        logMessage("INIT", "Stopping existing print manager");
         pythonProcess->terminate();
         pythonProcess->waitForFinished(3000);
         statusTimer->stop();
@@ -199,18 +212,16 @@ void Dialog::on_startPr_clicked()
     arguments << "--recipe" << recipePath;
     arguments << "--printer-ip" << printerIP;
 
-    ui->textBrowser->append("Starting automated multi-material printing...");
-    ui->textBrowser->append(QString("Command: python3 %1 --recipe %2 --printer-ip %3").arg(scriptPath, recipePath, printerIP));
+    logMessage("INIT", "Starting automated multi-material printing");
 
     pythonProcess->start("python3", arguments);
 
     if (!pythonProcess->waitForStarted(5000)) {
-        ui->textBrowser->append("ERROR: Failed to start print manager");
-        ui->textBrowser->append(QString("Process error: %1").arg(pythonProcess->errorString()));
+        logMessage("ERROR", QString("Failed to start print manager: %1").arg(pythonProcess->errorString()));
         QMessageBox::critical(this, "Process Error",
             QString("Failed to start print manager:\n%1").arg(pythonProcess->errorString()));
     } else {
-        ui->textBrowser->append("✓ Print manager started successfully - monitoring printer for material changes");
+        logMessage("INIT", "Print manager started successfully - monitoring for material changes");
         // Start auto status polling every 5 seconds
         statusTimer->start(5000);
     }
@@ -259,8 +270,6 @@ void Dialog::on_stopPr_clicked()
 {
     QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
     QString printerIP = ConfigManager::instance().getPrinterIP();
-    QString pythonCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from printer_comms import stop_print; stop_print('%2')\"").arg(QFileInfo(scriptPath).absolutePath(), printerIP);
-    ui->textBrowser->append(pythonCommand);
 
     QProcess process;
     process.start("python3", QStringList() << "-c" << QString("import sys; sys.path.append('%1'); from printer_comms import stop_print; stop_print('%2')").arg(QFileInfo(scriptPath).absolutePath(), printerIP));
@@ -276,14 +285,13 @@ void Dialog::on_stopPr_clicked()
            result = "Stop command sent successfully (no response from printer)";
        }
        QMessageBox::information(this, "Stop Printer Result", QString("Stop printer command executed.\n\nResponse: %1").arg(result));
-       ui->textBrowser->append("[STOP] Stop command sent:");
-       ui->textBrowser->append(result);
+       logMessage("STOP", "Print stopped successfully");
     }
     else
     {
        QString errorMessage = QString::fromUtf8(error);
        QMessageBox::critical(this, "Stop Printer Error", QString("Failed to stop printer.\n\nError: %1").arg(errorMessage));
-       ui->textBrowser->append("ERROR: " + errorMessage);
+       logMessage("ERROR", QString("Failed to stop printer: %1").arg(errorMessage));
    }
 
 }
@@ -292,8 +300,6 @@ void Dialog::on_checkstatus_clicked()
 {
     QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
     QString printerIP = ConfigManager::instance().getPrinterIP();
-    QString pythonCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from printer_comms import get_status; print(get_status('%2'))\"").arg(QFileInfo(scriptPath).absolutePath(), printerIP);
-    ui->textBrowser->append(pythonCommand);
 
     QProcess process;
     process.start("python3", QStringList() << "-c" << QString("import sys; sys.path.append('%1'); from printer_comms import get_status; print(get_status('%2'))").arg(QFileInfo(scriptPath).absolutePath(), printerIP));
@@ -305,15 +311,14 @@ void Dialog::on_checkstatus_clicked()
     if (error.isEmpty())
     {
        QString result = QString::fromUtf8(output);
-      // QMessageBox::information(this, "Python Command Result", result);
-       ui->textBrowser->append("[STATUS] Printer Status:");
+       logMessage("STATUS", "Printer status retrieved");
        ui->textBrowser->append(result);
        ui->statusLabel->setText("Connected...");
     }
     else
     {
        QString errorMessage = QString::fromUtf8(error);
-       //QMessageBox::critical(this, "Python Command Error", errorMessage);
+       logMessage("ERROR", "Failed to get printer status");
        ui->textBrowser->append(errorMessage);
        ui->statusLabel->setText("Disconnected...");
    }
@@ -494,8 +499,6 @@ void Dialog::on_getFiles_clicked()
 {
     QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
     QString printerIP = ConfigManager::instance().getPrinterIP();
-    QString pythonCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from printer_comms import get_files; print(get_files('%2'))\"").arg(QFileInfo(scriptPath).absolutePath(), printerIP);
-    ui->textBrowser->append(pythonCommand);
     ui->filesWidget->clear();
 
     QProcess process;
@@ -509,7 +512,7 @@ void Dialog::on_getFiles_clicked()
     {
        QString result = QString::fromUtf8(output);
        QMessageBox::information(this, "Python Command Result", result);
-       ui->textBrowser->append("[FILES] Available print files:");
+       logMessage("FILES", "Print files retrieved");
        ui->textBrowser->append(result);
        QString resultString(result);
        QStringList resultlist =
@@ -523,7 +526,7 @@ void Dialog::on_getFiles_clicked()
        ui->filesWidget->clear();
        QString errorMessage = QString::fromUtf8(error);
        QMessageBox::critical(this, "Python Command Error", errorMessage);
-       ui->textBrowser->append(errorMessage);
+       logMessage("ERROR", QString("Failed to get files: %1").arg(errorMessage));
    }
     connect(ui->filesWidget,&QListWidget::itemClicked, this, &Dialog::onPrintFileclicked);
 }

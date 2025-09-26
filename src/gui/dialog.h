@@ -68,6 +68,7 @@ private:
      void onPrintFileclicked(QListWidgetItem *item);
      void checkConnectionStatus();
      void autoStatusUpdate();
+     void logMessage(const QString &tag, const QString &message);
      QProcess *pythonProcess = nullptr; // Pointer to the Python script process
      QProcess *pythonFunction = nullptr;
      QProcess *WiFiFunction;
