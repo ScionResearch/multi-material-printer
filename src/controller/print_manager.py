@@ -626,18 +626,36 @@ def main():
         sys.stdout.flush()
 
         print("Step 3: Setting printer IP...")
-        if args.printer_ip:
-            manager.printer_ip = args.printer_ip
-            print(f"✓ Printer IP set to: {args.printer_ip}")
-        else:
-            print(f"✓ Using default printer IP: {manager.printer_ip}")
+        sys.stdout.flush()
 
-        print("Step 4: Resolving recipe path...")
-        recipe_path = args.recipe or manager._find_config_path().parent / 'recipe.txt'
-        print(f"✓ Recipe path: {recipe_path}")
+        try:
+            if args.printer_ip:
+                manager.printer_ip = args.printer_ip
+                print(f"✓ Printer IP set to: {args.printer_ip}")
+            else:
+                print(f"✓ Using default printer IP: {manager.printer_ip}")
+            sys.stdout.flush()
 
-        print("Step 5: Starting monitoring...")
-        success = manager.start_monitoring(recipe_path)
+            print("Step 4: Resolving recipe path...")
+            sys.stdout.flush()
+
+            recipe_path = args.recipe or manager._find_config_path().parent / 'recipe.txt'
+            print(f"✓ Recipe path: {recipe_path}")
+            sys.stdout.flush()
+
+            print("Step 5: Starting monitoring...")
+            sys.stdout.flush()
+
+            success = manager.start_monitoring(recipe_path)
+            print("DEBUG: start_monitoring() returned")
+            sys.stdout.flush()
+
+        except Exception as e:
+            print(f"DEBUG: Exception in steps 3-5: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
+            raise
 
         # Exit with appropriate code
         if success:
