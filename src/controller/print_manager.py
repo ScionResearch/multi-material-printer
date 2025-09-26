@@ -366,8 +366,8 @@ class PrintManager:
                 return False
 
             # Step 2: Wait for bed to rise after pause
-            print("Step 2: Waiting for bed to rise to top position...")
-            time.sleep(5)  # Extended wait for bed to reach top position
+            print("Step 2: Ensuring bed is in raised position...")
+            self._wait_for_bed_raised()
 
             # Step 3: Execute material change pumps
             print("Step 3: Starting material change pumps...")
@@ -409,7 +409,48 @@ class PrintManager:
         except Exception as e:
             print(f"Error resuming printer: {e}")
             return False
-            
+
+    def _wait_for_bed_raised(self):
+        """
+        Wait for bed to reach raised position after pause.
+
+        After pausing, the printer needs time to raise the bed to the top position
+        before material change operations can begin. This method implements a
+        robust wait with status verification.
+        """
+        print("  Waiting for bed to reach raised position...")
+
+        # Initial wait for pause command to take effect
+        time.sleep(2)
+
+        # Extended wait for mechanical bed movement
+        # SLA printers typically take 10-15 seconds to raise bed to top
+        bed_raise_time = 15
+        print(f"  Allowing {bed_raise_time} seconds for bed movement...")
+
+        for i in range(bed_raise_time):
+            time.sleep(1)
+            if (i + 1) % 5 == 0:  # Progress update every 5 seconds
+                print(f"  Bed positioning: {i + 1}/{bed_raise_time} seconds")
+
+        # Verify printer is still paused
+        try:
+            status = self._get_printer_status()
+            if status and hasattr(status, 'status'):
+                if status.status.lower() == 'pause':
+                    print("  ✓ Bed should now be in raised position, printer still paused")
+                else:
+                    print(f"  WARNING: Expected paused status but got: {status.status}")
+            else:
+                print("  WARNING: Could not verify pause status")
+        except Exception as e:
+            print(f"  WARNING: Error checking pause status: {e}")
+
+        # Additional safety buffer
+        print("  Adding 3-second safety buffer...")
+        time.sleep(3)
+        print("  ✓ Bed positioning complete - ready for material change")
+
     def _is_print_complete(self, status):
         """Check if print is complete based on status."""
         try:

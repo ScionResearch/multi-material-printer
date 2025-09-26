@@ -67,10 +67,12 @@ private:
      QString getFileSelection();
      void onPrintFileclicked(QListWidgetItem *item);
      void checkConnectionStatus();
+     void autoStatusUpdate();
      QProcess *pythonProcess = nullptr; // Pointer to the Python script process
      QProcess *pythonFunction = nullptr;
      QProcess *WiFiFunction;
      QTimer *timer;
+     QTimer *statusTimer;
 };
 
 #endif // DIALOG_H

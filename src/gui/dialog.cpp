@@ -17,11 +17,13 @@
 #include <QStringList>
 
 Dialog::Dialog(QWidget *parent)
-    : QDialog(parent), ui(new Ui::Dialog), pythonProcess(nullptr)
+    : QDialog(parent), ui(new Ui::Dialog), pythonProcess(nullptr), statusTimer(nullptr)
 {
-
     ui->setupUi(this);
-    // Connect button signal to slot
+
+    // Initialize status polling timer
+    statusTimer = new QTimer(this);
+    connect(statusTimer, &QTimer::timeout, this, &Dialog::autoStatusUpdate);
 }
 
 Dialog::~Dialog()
@@ -85,6 +87,50 @@ void Dialog::updateConnectionStatus()
 
 }
 
+void Dialog::autoStatusUpdate()
+{
+    QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
+    QString printerIP = ConfigManager::instance().getPrinterIP();
+
+    QProcess process;
+    process.start("python3", QStringList() << "-c" << QString("import sys; sys.path.append('%1'); from printer_comms import get_status; print(get_status('%2'))").arg(QFileInfo(scriptPath).absolutePath(), printerIP));
+    process.waitForFinished();
+
+    QByteArray output = process.readAllStandardOutput();
+    QByteArray error = process.readAllStandardError();
+
+    if (error.isEmpty()) {
+        QString result = QString::fromUtf8(output);
+
+        // Parse status for short display
+        if (result.contains("status:") && result.contains("current_layer:")) {
+            QStringList lines = result.split('\n');
+            QString status, layer, progress;
+
+            for (const QString &line : lines) {
+                if (line.contains("status:")) {
+                    status = line.split(":").last().trimmed();
+                }
+                if (line.contains("current_layer:")) {
+                    layer = line.split(":").last().trimmed();
+                }
+                if (line.contains("percent_complete:")) {
+                    progress = line.split(":").last().trimmed();
+                }
+            }
+
+            if (!status.isEmpty()) {
+                QString shortStatus = QString("[AUTO] Status: %1 | Layer: %2 | Progress: %3%")
+                    .arg(status.toUpper())
+                    .arg(layer.isEmpty() ? "0" : layer)
+                    .arg(progress.isEmpty() ? "0" : progress);
+                ui->textBrowser->append(shortStatus);
+                ui->statusLabel->setText(QString("Status: %1").arg(status.toUpper()));
+            }
+        }
+    }
+}
+
 void Dialog::on_startPr_clicked()
 {
     // Get paths from ConfigManager
@@ -135,6 +181,8 @@ void Dialog::on_startPr_clicked()
             if (exitCode != 0) {
                 ui->textBrowser->append("Print manager exited with error");
             }
+            // Stop auto status polling when print manager finishes
+            statusTimer->stop();
         });
     }
     else
@@ -142,6 +190,7 @@ void Dialog::on_startPr_clicked()
         ui->textBrowser->append("Stopping existing print manager...");
         pythonProcess->terminate();
         pythonProcess->waitForFinished(3000);
+        statusTimer->stop();
     }
 
     // Build command arguments for print_manager.py
@@ -162,6 +211,8 @@ void Dialog::on_startPr_clicked()
             QString("Failed to start print manager:\n%1").arg(pythonProcess->errorString()));
     } else {
         ui->textBrowser->append("✓ Print manager started successfully - monitoring printer for material changes");
+        // Start auto status polling every 5 seconds
+        statusTimer->start(5000);
     }
 }
 
@@ -225,9 +276,8 @@ void Dialog::on_stopPr_clicked()
            result = "Stop command sent successfully (no response from printer)";
        }
        QMessageBox::information(this, "Stop Printer Result", QString("Stop printer command executed.\n\nResponse: %1").arg(result));
-       ui->textBrowser->append("=== STOP PRINTER ===");
+       ui->textBrowser->append("[STOP] Stop command sent:");
        ui->textBrowser->append(result);
-       ui->textBrowser->append("=== END STOP ===");
     }
     else
     {
@@ -256,9 +306,8 @@ void Dialog::on_checkstatus_clicked()
     {
        QString result = QString::fromUtf8(output);
       // QMessageBox::information(this, "Python Command Result", result);
-       ui->textBrowser->append("\n******STATUS******\n");
+       ui->textBrowser->append("[STATUS] Printer Status:");
        ui->textBrowser->append(result);
-       ui->textBrowser->append("******END STATUS******");
        ui->statusLabel->setText("Connected...");
     }
     else
@@ -288,9 +337,8 @@ void Dialog::on_pausePr_clicked()
     {
        QString result = QString::fromUtf8(output);
        QMessageBox::information(this, "Python Command Result", result);
-       ui->textBrowser->append("\n******PAUSE******\n");
+       ui->textBrowser->append("[PAUSE] Print paused successfully:");
        ui->textBrowser->append(result);
-       ui->textBrowser->append("\n******END PAUSE******");
     }
     else
     {
@@ -318,9 +366,8 @@ void Dialog::on_resumePr_clicked()
     {
        QString result = QString::fromUtf8(output);
        QMessageBox::information(this, "Python Command Result", result);
-       ui->textBrowser->append("\n******RESUME******\n");
+       ui->textBrowser->append("[RESUME] Print resumed successfully:");
        ui->textBrowser->append(result);
-       ui->textBrowser->append("\n******END RESUME******");
     }
     else
     {
@@ -339,29 +386,15 @@ void Dialog::on_manualrun_clicked()
     QString inputText = ui->motor_settings->text();
 
     // Enhanced logging for input validation
-    ui->textBrowser->append("=== MOTOR CONTROL INPUT PROCESSING ===");
-    ui->textBrowser->append(QString("Raw input: '%1'").arg(inputText));
-    ui->textBrowser->append(QString("Input length: %1 characters").arg(inputText.length()));
+    ui->textBrowser->append("[PUMP] Starting pump operation:");
+    ui->textBrowser->append(QString("Input: %1").arg(inputText));
 
     // Split the input using a comma as the delimiter
     QStringList inputValues = inputText.split(",");
 
-    // Enhanced logging for parsing
-    ui->textBrowser->append(QString("Number of comma-separated values found: %1").arg(inputValues.size()));
-    for (int i = 0; i < inputValues.size(); ++i) {
-        ui->textBrowser->append(QString("Value %1: '%2' (trimmed: '%3')").arg(i+1).arg(inputValues[i]).arg(inputValues[i].trimmed()));
-    }
-
     if (inputValues.size() != 3)
     {
-        // Enhanced error message with more detail
-        ui->textBrowser->append("ERROR: Invalid input format detected!");
-        ui->textBrowser->append("Expected format: Motor,Direction,Timing (e.g., 'A,F,5')");
-        ui->textBrowser->append("- Motor: A, B, C, or D");
-        ui->textBrowser->append("- Direction: F (forward) or R (reverse)");
-        ui->textBrowser->append("- Timing: duration in seconds (integer)");
-        ui->textBrowser->append(QString("You provided %1 values instead of 3").arg(inputValues.size()));
-
+        ui->textBrowser->append("[ERROR] Invalid pump format - expected: Motor,Direction,Timing");
         QMessageBox::critical(this, "Motor Control Error",
             QString("Invalid input format.\n\n"
                    "Expected: Motor,Direction,Timing (e.g., 'A,F,5')\n"
@@ -373,15 +406,9 @@ void Dialog::on_manualrun_clicked()
     QString argumentDirection = inputValues[1].trimmed();
     QString argumentTiming = inputValues[2].trimmed();
 
-    // Enhanced validation and logging for parsed values
-    ui->textBrowser->append("=== PARAMETER VALIDATION ===");
-    ui->textBrowser->append(QString("Motor: '%1'").arg(argumentMotor));
-    ui->textBrowser->append(QString("Direction: '%1'").arg(argumentDirection));
-    ui->textBrowser->append(QString("Timing: '%1'").arg(argumentTiming));
-
     // Validate motor parameter
     if (!argumentMotor.isEmpty() && !(argumentMotor == "A" || argumentMotor == "B" || argumentMotor == "C" || argumentMotor == "D")) {
-        ui->textBrowser->append(QString("ERROR: Invalid motor '%1'. Must be A, B, C, or D").arg(argumentMotor));
+        ui->textBrowser->append(QString("[ERROR] Invalid motor '%1' - must be A, B, C, or D").arg(argumentMotor));
         QMessageBox::critical(this, "Motor Control Error",
             QString("Invalid motor '%1'.\nMust be A, B, C, or D").arg(argumentMotor));
         return;
@@ -389,7 +416,7 @@ void Dialog::on_manualrun_clicked()
 
     // Validate direction parameter
     if (!argumentDirection.isEmpty() && !(argumentDirection == "F" || argumentDirection == "R")) {
-        ui->textBrowser->append(QString("ERROR: Invalid direction '%1'. Must be F (forward) or R (reverse)").arg(argumentDirection));
+        ui->textBrowser->append(QString("[ERROR] Invalid direction '%1' - must be F or R").arg(argumentDirection));
         QMessageBox::critical(this, "Motor Control Error",
             QString("Invalid direction '%1'.\nMust be F (forward) or R (reverse)").arg(argumentDirection));
         return;
@@ -399,14 +426,13 @@ void Dialog::on_manualrun_clicked()
     bool timingOk;
     int intargumentTiming = argumentTiming.toInt(&timingOk);
     if (!timingOk || intargumentTiming <= 0) {
-        ui->textBrowser->append(QString("ERROR: Invalid timing '%1'. Must be a positive integer (seconds)").arg(argumentTiming));
+        ui->textBrowser->append(QString("[ERROR] Invalid timing '%1' - must be positive integer").arg(argumentTiming));
         QMessageBox::critical(this, "Motor Control Error",
             QString("Invalid timing '%1'.\nMust be a positive integer representing duration in seconds").arg(argumentTiming));
         return;
     }
 
-    ui->textBrowser->append("✓ All parameters validated successfully");
-    ui->textBrowser->append(QString("✓ Motor: %1, Direction: %2, Duration: %3 seconds").arg(argumentMotor).arg(argumentDirection).arg(intargumentTiming));
+    ui->textBrowser->append(QString("[PUMP] Running Motor %1 %2 for %3 seconds").arg(argumentMotor).arg(argumentDirection == "F" ? "forward" : "reverse").arg(intargumentTiming));
 
     // Build and log the Python command
     QString terminalCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from %2 import %3; %3('%4', '%5', %6)\"")
@@ -417,23 +443,15 @@ void Dialog::on_manualrun_clicked()
         .arg(argumentDirection)
         .arg(intargumentTiming);
 
-    ui->textBrowser->append("=== COMMAND EXECUTION ===");
-    ui->textBrowser->append("Python command to execute:");
-    ui->textBrowser->append(terminalCommand);
-    //pythonFunction = new QProcess;
-
     if (!pythonFunction)
     {
-        ui->textBrowser->append("Initializing motor control process...");
         pythonFunction = new QProcess(this);
 
-        // Enhanced output handling with better logging
+        // Enhanced output handling with pump-specific logging
         connect(pythonFunction, &QProcess::readyReadStandardOutput, this, [this]() {
             QString output = QString::fromUtf8(pythonFunction->readAllStandardOutput());
             if (!output.isEmpty()) {
-                ui->textBrowser->append("=== MOTOR PROCESS STDOUT ===");
-                ui->textBrowser->append(output.trimmed());
-                ui->textBrowser->append("=== END STDOUT ===");
+                ui->textBrowser->append(QString("[PUMP OUTPUT] %1").arg(output.trimmed()));
             }
         });
 
@@ -441,55 +459,34 @@ void Dialog::on_manualrun_clicked()
         connect(pythonFunction, &QProcess::readyReadStandardError, this, [this]() {
             QString error = QString::fromUtf8(pythonFunction->readAllStandardError());
             if (!error.isEmpty()) {
-                ui->textBrowser->append("=== MOTOR PROCESS STDERR ===");
-                ui->textBrowser->append(QString("ERROR: %1").arg(error.trimmed()));
-                ui->textBrowser->append("=== END STDERR ===");
+                ui->textBrowser->append(QString("[PUMP ERROR] %1").arg(error.trimmed()));
             }
         });
 
         // Add process state change handling
         connect(pythonFunction, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
                 this, [this](int exitCode, QProcess::ExitStatus exitStatus) {
-            ui->textBrowser->append("=== MOTOR PROCESS FINISHED ===");
-            ui->textBrowser->append(QString("Exit code: %1").arg(exitCode));
-            ui->textBrowser->append(QString("Exit status: %1").arg(exitStatus == QProcess::NormalExit ? "Normal" : "Crashed"));
             if (exitCode == 0) {
-                ui->textBrowser->append("✓ Motor operation completed successfully");
+                ui->textBrowser->append("[PUMP] Operation completed successfully");
             } else {
-                ui->textBrowser->append("✗ Motor operation failed");
+                ui->textBrowser->append(QString("[PUMP] Operation failed with exit code %1").arg(exitCode));
             }
-            ui->textBrowser->append("=== END PROCESS ===");
         });
     }
     else
     {
-        ui->textBrowser->append("Terminating existing motor process...");
+        ui->textBrowser->append("[PUMP] Stopping previous pump operation...");
         pythonFunction->terminate();
         pythonFunction->waitForFinished(3000); // Wait up to 3 seconds
-        ui->textBrowser->append("Previous process terminated");
     }
 
-    ui->textBrowser->append("Starting motor control process...");
     pythonFunction->start("/bin/bash", QStringList() << "-c" << terminalCommand);
 
     if (!pythonFunction->waitForStarted(5000)) {
-        ui->textBrowser->append("ERROR: Failed to start motor control process");
-        ui->textBrowser->append(QString("Process error: %1").arg(pythonFunction->errorString()));
+        ui->textBrowser->append("[ERROR] Failed to start pump control process");
     } else {
-        ui->textBrowser->append("✓ Motor control process started successfully");
+        ui->textBrowser->append("[PUMP] Process started successfully");
     }
-
-
-
-    //QProcess process(this);
-
-
-
-    //QString output = process.readAllStandardOutput();
-    //QString error = process.readAllStandardError();
-
-    //ui->textBrowser->setText(output);
-   // QMessageBox::information(this, "Output", output);
 }
 
 
@@ -512,9 +509,8 @@ void Dialog::on_getFiles_clicked()
     {
        QString result = QString::fromUtf8(output);
        QMessageBox::information(this, "Python Command Result", result);
-       ui->textBrowser->append("\n******FILES******\n");
+       ui->textBrowser->append("[FILES] Available print files:");
        ui->textBrowser->append(result);
-       ui->textBrowser->append("\n******END FILES******");
        QString resultString(result);
        QStringList resultlist =
                resultString.split('\n');
@@ -570,9 +566,8 @@ void Dialog::onPrintFileclicked(QListWidgetItem *item)
     {
        QString result = QString::fromUtf8(output);
        //QMessageBox::information(this, "Python Command Result", result);
-       ui->textBrowser->append("\n******PRINTING FILE******\n");
+       ui->textBrowser->append("[PRINT START] Starting print file:");
        ui->textBrowser->append(result);
-       ui->textBrowser->append("\n******END PRINTING FILE******");
     }
     else
     {
@@ -586,7 +581,7 @@ void Dialog::on_stopMr_clicked()
 {
     if (pythonFunction && pythonFunction->state() != QProcess::NotRunning)
     {
-        ui->textBrowser->append("Stopped Motor...");
+        ui->textBrowser->append("[PUMP] Stopped motor operation");
         pythonFunction->terminate();
         pythonFunction->waitForFinished();
         pythonFunction->deleteLater();
@@ -598,10 +593,11 @@ void Dialog::on_stopMM_clicked()
 {
     if (pythonProcess && pythonProcess->state() != QProcess::NotRunning)
     {
-        ui->textBrowser->append("Stopped MM...");
+        ui->textBrowser->append("[PRINT] Stopped multi-material print manager");
         pythonProcess->terminate();
         pythonProcess->waitForFinished();
         pythonProcess->deleteLater();
         pythonProcess = nullptr;
+        statusTimer->stop();
     }
 }
