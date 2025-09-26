@@ -208,19 +208,34 @@ class PrintManager:
 
         Polls printer every 5 seconds, triggers material changes at target layers.
         """
-        print("Multi-material print manager starting...")
+        try:
+            print("Multi-material print manager starting...")
+            sys.stdout.flush()
 
-        if recipe_path and not self.load_recipe(recipe_path):
-            print("CRITICAL ERROR: Failed to load recipe, aborting.")
+            if recipe_path and not self.load_recipe(recipe_path):
+                print("CRITICAL ERROR: Failed to load recipe, aborting.")
+                sys.stdout.flush()
+                return False
+
+            if not self.recipe:
+                print("WARNING: No recipe loaded - monitoring only")
+            else:
+                recipe_summary = dict(sorted(self.recipe.items()))
+                print(f"Recipe loaded: {recipe_summary}")
+            sys.stdout.flush()
+
+            print(f"Monitoring printer {self.printer_ip} every 5 seconds...")
+            sys.stdout.flush()
+
+            print("DEBUG: About to enter monitoring loop")
+            sys.stdout.flush()
+
+        except Exception as e:
+            print(f"DEBUG: Exception in start_monitoring setup: {e}")
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
             return False
-
-        if not self.recipe:
-            print("WARNING: No recipe loaded - monitoring only")
-        else:
-            recipe_summary = dict(sorted(self.recipe.items()))
-            print(f"Recipe loaded: {recipe_summary}")
-
-        print(f"Monitoring printer {self.printer_ip} every 5 seconds...")
 
         try:
             loop_count = 0
