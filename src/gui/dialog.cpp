@@ -214,6 +214,18 @@ void Dialog::on_startPr_clicked()
 
     logMessage("INIT", "Starting automated multi-material printing");
 
+    // Set proper working directory and Python path for imports to work
+    QString scriptDir = QFileInfo(scriptPath).absolutePath();
+    pythonProcess->setWorkingDirectory(scriptDir);
+
+    // Set environment to ensure Python can find controller modules
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert("PYTHONPATH", scriptDir);
+    pythonProcess->setProcessEnvironment(env);
+
+    logMessage("DEBUG", QString("Working directory: %1").arg(scriptDir));
+    logMessage("DEBUG", QString("PYTHONPATH: %1").arg(scriptDir));
+
     pythonProcess->start("python3", arguments);
 
     if (!pythonProcess->waitForStarted(5000)) {
