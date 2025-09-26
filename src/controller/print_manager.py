@@ -1,24 +1,37 @@
 """
-Print Manager - Automated multi-material printing orchestration
+Print Manager - Production Multi-Material Printing Orchestration
 
-Central coordinator for multi-material printing operations. Monitors printer status
-via uart-wifi library and triggers material changes at specified layers.
+Modern, GUI-friendly version with proper threading, logging, and queue communication.
+Replaces blocking while loop with background threading to prevent GUI freezing.
 
 Key Features:
-- Real-time printer monitoring and layer detection
-- Recipe-based material changes (format: "A,50:B,120:C,200")  
-- Coordinated pause/resume operations during material swaps
-- Integration with printer_comms and mmu_control modules
+- Background threading prevents GUI freezing
+- Standard logging library for structured output
+- Queue-based communication for safe cross-thread messaging
+- Clean start/stop/pause/resume API for GUI integration
+- Exception handling and graceful shutdown
+- Real-time status updates and progress monitoring
 
 Usage:
     manager = PrintManager()
     manager.load_recipe('recipe.txt')
-    manager.start_monitoring()
+    manager.start_monitoring('192.168.4.3')
 
-Requires: printer_comms (uart-wifi), mmu_control, configuration files
+    while manager.is_running():
+        try:
+            status = manager.get_status_update(timeout=1.0)
+            print(f"{status.tag}: {status.message}")
+        except queue.Empty:
+            pass
+
+    manager.stop_monitoring()
+
+Requires: printer_comms (uart-wifi), mmu_control, threading, queue, logging
 """
 
-import socket
+import logging
+import threading
+import queue
 import time
 import argparse
 import json
@@ -26,121 +39,171 @@ import configparser
 import os
 import sys
 from pathlib import Path
+from enum import Enum
+from dataclasses import dataclass
+from typing import Dict, Optional, Any
 
-# Import other controller modules with robust error handling
+# Set up logger
+logger = logging.getLogger(__name__)
+
+# Import controller modules with robust error handling
 mmu_control = None
 printer_comms = None
 
-print("DEBUG: Attempting to import controller modules...")
-print(f"DEBUG: Current working directory: {os.getcwd()}")
-print(f"DEBUG: Script location: {__file__}")
-print(f"DEBUG: Python path: {sys.path}")
+def _import_controller_modules():
+    """Import controller modules with fallback strategies."""
+    global mmu_control, printer_comms
 
-try:
-    # Try relative imports first (package mode)
-    from . import mmu_control
-    from . import printer_comms
-    print("DEBUG: ✓ Relative imports successful")
-except ImportError as e:
-    print(f"DEBUG: Relative import failed: {e}")
+    logger.debug("Attempting to import controller modules...")
+    logger.debug(f"Current working directory: {os.getcwd()}")
+    logger.debug(f"Script location: {__file__}")
+    logger.debug(f"Python path: {sys.path}")
+
     try:
-        # Try absolute imports (direct execution mode)
-        import mmu_control
-        import printer_comms
-        print("DEBUG: ✓ Absolute imports successful")
-    except ImportError as e2:
-        print(f"DEBUG: Absolute import failed: {e2}")
+        # Try relative imports first (package mode)
+        from . import mmu_control
+        from . import printer_comms
+        logger.info("✓ Relative imports successful")
+        return True
+    except ImportError as e:
+        logger.debug(f"Relative import failed: {e}")
         try:
-            # Try adding current directory to path
-            script_dir = Path(__file__).parent
-            sys.path.insert(0, str(script_dir))
+            # Try absolute imports (direct execution mode)
             import mmu_control
             import printer_comms
-            print("DEBUG: ✓ Path-adjusted imports successful")
-        except ImportError as e3:
-            print(f"FATAL: All import methods failed!")
-            print(f"  Relative import error: {e}")
-            print(f"  Absolute import error: {e2}")
-            print(f"  Path-adjusted import error: {e3}")
-            print(f"  Current working directory: {os.getcwd()}")
-            print(f"  Script directory: {Path(__file__).parent}")
-            print(f"  Python path: {sys.path}")
+            logger.info("✓ Absolute imports successful")
+            return True
+        except ImportError as e2:
+            logger.debug(f"Absolute import failed: {e2}")
+            try:
+                # Try adding current directory to path
+                script_dir = Path(__file__).parent
+                sys.path.insert(0, str(script_dir))
+                import mmu_control
+                import printer_comms
+                logger.info("✓ Path-adjusted imports successful")
+                return True
+            except ImportError as e3:
+                logger.error("FATAL: All import methods failed!")
+                logger.error(f"  Relative import error: {e}")
+                logger.error(f"  Absolute import error: {e2}")
+                logger.error(f"  Path-adjusted import error: {e3}")
+                logger.error(f"  Current working directory: {os.getcwd()}")
+                logger.error(f"  Script directory: {Path(__file__).parent}")
+                logger.error(f"  Python path: {sys.path}")
+                return False
 
-            # Force flush output before exiting
-            sys.stdout.flush()
-            sys.stderr.flush()
-            raise ImportError("Could not import required controller modules") from e3
+# Initialize imports
+_import_controller_modules()
 
-print("DEBUG: Import section completed successfully")
-sys.stdout.flush()
+class PrintManagerState(Enum):
+    """Print manager operational states."""
+    IDLE = "idle"
+    STARTING = "starting"
+    MONITORING = "monitoring"
+    MATERIAL_CHANGING = "material_changing"
+    PAUSING = "pausing"
+    STOPPING = "stopping"
+    ERROR = "error"
+
+@dataclass
+class StatusUpdate:
+    """Status update message for queue communication."""
+    timestamp: float
+    level: str  # 'info', 'warning', 'error', 'debug'
+    tag: str   # 'MONITOR', 'MATERIAL_CHANGE', 'STATUS', etc.
+    message: str
+    data: Optional[Dict[str, Any]] = None
 
 class PrintManager:
     """
-    Automated multi-material printing coordinator.
-    
-    Monitors printer progress via uart-wifi and triggers material changes at 
-    specified layers. Integrates with printer_comms and mmu_control modules.
-    
+    Production-ready multi-material printing coordinator.
+
+    Features background monitoring thread, structured logging, and queue-based
+    communication for GUI integration. Manages printer monitoring and material
+    changes without blocking the main application thread.
+
     Attributes:
-        printer_ip (str): Target printer IP
-        recipe (dict): Layer->material mapping
+        state (PrintManagerState): Current operational state
+        recipe (Dict[int, str]): Layer->material mapping
+        printer_ip (str): Target printer IP address
+        is_monitoring (bool): True if monitoring thread is active
     """
-    
-    def __init__(self, config_path=None):
-        """Initialize print manager with configuration."""
+
+    def __init__(self, config_path: Optional[str] = None):
+        """
+        Initialize print manager with configuration.
+
+        Args:
+            config_path: Optional path to configuration file
+        """
+        logger.info("Initializing PrintManager...")
+
+        # Configuration
         self.config_path = config_path or self._find_config_path()
         self.config = self._load_config()
         self.printer_ip = self.config.get('printer', 'ip_address', fallback='192.168.4.2')
         self.printer_port = self.config.getint('printer', 'port', fallback=80)
         self.timeout = self.config.getint('printer', 'timeout', fallback=10)
-        
-        # Load recipe if provided
-        self.recipe = {}
-        
-    def _find_config_path(self):
+
+        # State management
+        self.state = PrintManagerState.IDLE
+        self.recipe: Dict[int, str] = {}
+        self._last_processed_layer: Optional[int] = None
+
+        # Threading and communication
+        self._monitor_thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._status_queue = queue.Queue()
+        self._state_lock = threading.RLock()
+
+        # Monitoring configuration
+        self.poll_interval = 5.0  # seconds between status polls
+        self.log_cycle_frequency = 10  # log every N cycles
+        self.progress_frequency = 20  # show progress every N cycles
+
+        logger.info(f"PrintManager initialized - printer: {self.printer_ip}")
+
+    def _find_config_path(self) -> Path:
         """Find configuration file path."""
         script_dir = Path(__file__).parent
         config_dir = script_dir.parent.parent / 'config'
         return config_dir / 'network_settings.ini'
-    
-    def _load_config(self):
+
+    def _load_config(self) -> configparser.ConfigParser:
         """Load configuration from INI file."""
         config = configparser.ConfigParser()
         try:
             config.read(self.config_path)
-            print(f"Loaded configuration from: {self.config_path}")
+            logger.info(f"Loaded configuration from: {self.config_path}")
         except Exception as e:
-            print(f"Warning: Could not load config file: {e}")
-            # Use defaults
+            logger.warning(f"Could not load config file: {e} - using defaults")
         return config
-    
-    def load_recipe(self, recipe_path):
+
+    def load_recipe(self, recipe_path: str) -> bool:
         """
         Load material change recipe from file.
 
         Args:
-            recipe_path (str): Path to recipe file
+            recipe_path: Path to recipe file
 
         Returns:
-            bool: True if successful
+            True if successful
 
         Format: "A,50:B,120:C,200" (material,layer pairs)
         """
         try:
-            print(f"Loading recipe: {recipe_path}")
+            logger.info(f"Loading recipe: {recipe_path}")
 
-            # Check if file exists
-            import os
             if not os.path.exists(recipe_path):
-                print(f"ERROR: Recipe file does not exist: {recipe_path}")
+                logger.error(f"Recipe file does not exist: {recipe_path}")
                 return False
 
-            # Read file contents
             with open(recipe_path, 'r') as f:
                 recipe_text = f.read().strip()
 
             if not recipe_text:
-                print("WARNING: Recipe file is empty")
+                logger.warning("Recipe file is empty")
                 self.recipe = {}
                 return True
 
@@ -151,189 +214,318 @@ class PrintManager:
 
             for i, pair in enumerate(pairs):
                 if ',' not in pair:
-                    print(f"WARNING: Skipping invalid pair (no comma): '{pair}'")
+                    logger.warning(f"Skipping invalid pair (no comma): '{pair}'")
                     continue
 
                 try:
-                    material, layer_str = pair.split(',', 1)  # Split only on first comma
+                    material, layer_str = pair.split(',', 1)
                     material = material.strip().upper()
                     layer_str = layer_str.strip()
 
                     # Validate material
                     if material not in valid_materials:
-                        print(f"ERROR: Invalid material '{material}'. Must be one of: {valid_materials}")
+                        logger.error(f"Invalid material '{material}'. Must be one of: {valid_materials}")
                         continue
 
                     # Validate layer number
                     try:
                         layer = int(layer_str)
                         if layer <= 0:
-                            print(f"ERROR: Invalid layer number '{layer}'. Must be positive integer.")
+                            logger.error(f"Invalid layer number '{layer}'. Must be positive integer.")
                             continue
                     except ValueError:
-                        print(f"ERROR: Invalid layer number '{layer_str}'. Must be integer.")
+                        logger.error(f"Invalid layer number '{layer_str}'. Must be integer.")
                         continue
 
                     # Check for duplicate layers
                     if layer in self.recipe:
-                        print(f"WARNING: Duplicate layer {layer}. Overriding {self.recipe[layer]} with {material}")
+                        logger.warning(f"Duplicate layer {layer}. Overriding {self.recipe[layer]} with {material}")
 
                     self.recipe[layer] = material
-                    # Added layer mapping
+                    logger.debug(f"Added layer mapping: {layer} -> {material}")
 
                 except Exception as e:
-                    print(f"ERROR: Failed to parse pair '{pair}': {e}")
+                    logger.error(f"Failed to parse pair '{pair}': {e}")
                     continue
 
             if self.recipe:
                 sorted_layers = sorted(self.recipe.keys())
-                print(f"Successfully loaded {len(self.recipe)} material changes")
-                print(f"Layer range: {min(sorted_layers)} to {max(sorted_layers)}")
+                logger.info(f"Successfully loaded {len(self.recipe)} material changes")
+                logger.info(f"Layer range: {min(sorted_layers)} to {max(sorted_layers)}")
             else:
-                print("WARNING: No valid material changes found in recipe")
+                logger.warning("No valid material changes found in recipe")
+
             return True
 
         except Exception as e:
-            print(f"CRITICAL ERROR loading recipe: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Critical error loading recipe: {e}", exc_info=True)
             return False
-    
-    def start_monitoring(self, recipe_path=None):
+
+    def start_monitoring(self, printer_ip: Optional[str] = None, recipe_path: Optional[str] = None) -> bool:
         """
-        Start automated printer monitoring and material changes.
+        Start background monitoring thread.
 
         Args:
-            recipe_path (str, optional): Recipe file to load
+            printer_ip: Optional printer IP override
+            recipe_path: Optional recipe file to load first
 
-        Polls printer every 5 seconds, triggers material changes at target layers.
+        Returns:
+            True if started successfully
         """
-        try:
-            print("Multi-material print manager starting...")
-            sys.stdout.flush()
-
-            if recipe_path and not self.load_recipe(recipe_path):
-                print("CRITICAL ERROR: Failed to load recipe, aborting.")
-                sys.stdout.flush()
+        with self._state_lock:
+            if self.state != PrintManagerState.IDLE:
+                logger.warning(f"Cannot start monitoring - current state: {self.state}")
                 return False
 
-            if not self.recipe:
-                print("WARNING: No recipe loaded - monitoring only")
-            else:
-                recipe_summary = dict(sorted(self.recipe.items()))
-                print(f"Recipe loaded: {recipe_summary}")
-            sys.stdout.flush()
+            self.state = PrintManagerState.STARTING
 
-            print(f"Monitoring printer {self.printer_ip} every 5 seconds...")
-            sys.stdout.flush()
+            # Load recipe if provided
+            if recipe_path and not self.load_recipe(recipe_path):
+                logger.error("Failed to load recipe, aborting.")
+                self.state = PrintManagerState.ERROR
+                return False
 
-            print("DEBUG: About to enter monitoring loop")
-            sys.stdout.flush()
+            # Override printer IP if provided
+            if printer_ip:
+                self.printer_ip = printer_ip
+                logger.info(f"Printer IP set to: {printer_ip}")
 
-        except Exception as e:
-            print(f"DEBUG: Exception in start_monitoring setup: {e}")
-            import traceback
-            traceback.print_exc()
-            sys.stdout.flush()
-            return False
+            # Clear stop event and reset state
+            self._stop_event.clear()
+            self._last_processed_layer = None
 
+            # Start monitoring thread
+            self._monitor_thread = threading.Thread(
+                target=self._monitoring_loop,
+                name="PrintManager-Monitor",
+                daemon=True
+            )
+
+            try:
+                self._monitor_thread.start()
+                logger.info("Background monitoring thread started")
+                self._send_status_update("STATUS", "Monitoring started", {"printer_ip": self.printer_ip})
+                return True
+            except Exception as e:
+                logger.error(f"Failed to start monitoring thread: {e}")
+                self.state = PrintManagerState.ERROR
+                return False
+
+    def stop_monitoring(self) -> bool:
+        """
+        Stop background monitoring thread gracefully.
+
+        Returns:
+            True if stopped successfully
+        """
+        with self._state_lock:
+            if self.state == PrintManagerState.IDLE:
+                logger.info("Monitoring already stopped")
+                return True
+
+            logger.info("Stopping monitoring thread...")
+            self.state = PrintManagerState.STOPPING
+            self._stop_event.set()
+
+            # Wait for thread to complete
+            if self._monitor_thread and self._monitor_thread.is_alive():
+                self._monitor_thread.join(timeout=10.0)
+
+                if self._monitor_thread.is_alive():
+                    logger.warning("Monitoring thread did not stop gracefully")
+                    return False
+
+            self.state = PrintManagerState.IDLE
+            logger.info("Monitoring stopped successfully")
+            self._send_status_update("STATUS", "Monitoring stopped")
+            return True
+
+    def is_running(self) -> bool:
+        """Check if monitoring thread is active."""
+        with self._state_lock:
+            return self.state in [PrintManagerState.STARTING, PrintManagerState.MONITORING, PrintManagerState.MATERIAL_CHANGING]
+
+    def get_status_update(self, timeout: Optional[float] = None) -> StatusUpdate:
+        """
+        Get next status update from queue.
+
+        Args:
+            timeout: Maximum time to wait (None = block indefinitely)
+
+        Returns:
+            StatusUpdate object
+
+        Raises:
+            queue.Empty: If no update available within timeout
+        """
+        return self._status_queue.get(timeout=timeout)
+
+    def get_current_state(self) -> Dict[str, Any]:
+        """
+        Get current manager state information.
+
+        Returns:
+            Dictionary with current state details
+        """
+        with self._state_lock:
+            return {
+                "state": self.state.value,
+                "printer_ip": self.printer_ip,
+                "recipe_count": len(self.recipe),
+                "is_monitoring": self.is_running(),
+                "last_processed_layer": self._last_processed_layer,
+                "remaining_changes": list(sorted(self.recipe.keys()))
+            }
+
+    def _send_status_update(self, tag: str, message: str, data: Optional[Dict[str, Any]] = None, level: str = "info"):
+        """Send status update to queue for GUI consumption."""
         try:
+            update = StatusUpdate(
+                timestamp=time.time(),
+                level=level,
+                tag=tag,
+                message=message,
+                data=data or {}
+            )
+            self._status_queue.put_nowait(update)
+        except queue.Full:
+            logger.warning("Status queue full - dropping update")
+
+    def _monitoring_loop(self):
+        """
+        Main monitoring loop running in background thread.
+
+        Polls printer status, detects layer changes, and triggers material swaps.
+        Communicates with main thread via status queue.
+        """
+        try:
+            with self._state_lock:
+                self.state = PrintManagerState.MONITORING
+
+            logger.info(f"Starting monitoring loop - printer: {self.printer_ip}")
+            self._send_status_update("MONITOR", f"Monitoring printer {self.printer_ip} every {self.poll_interval}s")
+
+            if self.recipe:
+                recipe_summary = dict(sorted(self.recipe.items()))
+                logger.info(f"Recipe loaded: {recipe_summary}")
+                self._send_status_update("MONITOR", f"Recipe loaded with {len(self.recipe)} changes", {"recipe": recipe_summary})
+            else:
+                logger.warning("No recipe loaded - monitoring only")
+                self._send_status_update("MONITOR", "No recipe loaded - monitoring only", level="warning")
+
             loop_count = 0
-            while True:
+
+            while not self._stop_event.is_set():
                 loop_count += 1
 
-                # CRITICAL: Force output flush on every iteration for GUI visibility
-                sys.stdout.flush()
-                sys.stderr.flush()
+                # Periodic logging
+                if loop_count % self.log_cycle_frequency == 1:
+                    logger.debug(f"Monitor cycle #{loop_count} - {time.strftime('%H:%M:%S')}")
 
-                if loop_count % 10 == 1:  # Log every 10th cycle
-                    print(f"\n[MONITOR] Cycle #{loop_count} - {time.strftime('%H:%M:%S')}")
-                    sys.stdout.flush()
-
-                # Get current printer status
+                # Get printer status
                 status = self._get_printer_status()
                 if not status:
-                    print("[MONITOR] ERROR: Lost connection to printer - retrying in 5 seconds")
-                    sys.stdout.flush()
-                    time.sleep(5)
-                    continue
+                    logger.warning("Lost connection to printer - retrying...")
+                    self._send_status_update("MONITOR", "Lost connection to printer", level="warning")
+                    if not self._stop_event.wait(self.poll_interval):
+                        continue
+                    break
 
                 # Extract current layer
                 current_layer = self._extract_current_layer(status)
                 if current_layer is None:
-                    if loop_count % 20 == 1:  # Only show warning every 20 cycles
-                        print("[MONITOR] WARNING: Could not determine current layer")
-                        sys.stdout.flush()
-                    time.sleep(2)
-                    continue
+                    if loop_count % self.progress_frequency == 1:
+                        logger.debug("Could not determine current layer")
+                    if not self._stop_event.wait(2.0):
+                        continue
+                    break
 
-                if loop_count % 5 == 1:  # Show layer every 5 cycles
-                    print(f"[MONITOR] Current layer: {current_layer}")
-                    sys.stdout.flush()
+                # Periodic layer reporting
+                if loop_count % (self.log_cycle_frequency // 2) == 1:
+                    logger.info(f"Current layer: {current_layer}")
+                    self._send_status_update("MONITOR", f"Current layer: {current_layer}", {"current_layer": current_layer})
 
-                # Check if we need to change material (only if not already processed this layer)
-                print(f"[MONITOR] Checking layer {current_layer} for material change. Recipe layers: {list(self.recipe.keys())}")
-                sys.stdout.flush()
-
-                if current_layer in self.recipe and (not hasattr(self, '_last_processed_layer') or current_layer != getattr(self, '_last_processed_layer', -1)):
+                # Check for material changes
+                if current_layer in self.recipe and current_layer != self._last_processed_layer:
                     material = self.recipe[current_layer]
-                    print(f"\n[MATERIAL CHANGE] TRIGGERED: Layer {current_layer} → Material {material}")
-                    sys.stdout.flush()
+                    logger.info(f"Material change triggered: Layer {current_layer} → Material {material}")
+                    self._send_status_update("MATERIAL_CHANGE", f"Triggered: Layer {current_layer} → Material {material}",
+                                           {"layer": current_layer, "material": material})
+
+                    with self._state_lock:
+                        self.state = PrintManagerState.MATERIAL_CHANGING
 
                     if self._handle_material_change(material):
-                        # Mark this layer as processed and remove from recipe
+                        # Mark processed and remove from recipe
                         self._last_processed_layer = current_layer
                         del self.recipe[current_layer]
-                        print(f"[MATERIAL CHANGE] Completed. Remaining: {len(self.recipe)}")
-                        sys.stdout.flush()
+
+                        remaining = len(self.recipe)
+                        logger.info(f"Material change completed. Remaining: {remaining}")
+                        self._send_status_update("MATERIAL_CHANGE", f"Completed. Remaining changes: {remaining}",
+                                               {"remaining": remaining})
+
                         if self.recipe:
                             next_layer = min(self.recipe.keys())
-                            print(f"[MATERIAL CHANGE] Next change at layer {next_layer}")
-                            sys.stdout.flush()
+                            logger.info(f"Next change at layer {next_layer}")
+                            self._send_status_update("MATERIAL_CHANGE", f"Next change at layer {next_layer}",
+                                                   {"next_layer": next_layer})
                     else:
-                        print("[MATERIAL CHANGE] ERROR: Material change failed!")
-                        sys.stdout.flush()
-                        # Mark layer as processed even if failed to prevent repeated attempts
+                        logger.error("Material change failed!")
+                        self._send_status_update("MATERIAL_CHANGE", "Material change failed!", level="error")
+                        # Mark as processed to prevent repeated attempts
                         self._last_processed_layer = current_layer
 
+                    with self._state_lock:
+                        self.state = PrintManagerState.MONITORING
+
                 else:
-                    # Show upcoming changes
-                    if self.recipe and loop_count % 20 == 1:  # Show upcoming changes every 20 cycles
+                    # Show upcoming changes periodically
+                    if self.recipe and loop_count % self.progress_frequency == 1:
                         upcoming = [layer for layer in self.recipe.keys() if layer > current_layer]
                         if upcoming:
                             next_change = min(upcoming)
                             layers_until = next_change - current_layer
-                            print(f"[MONITOR] Next change in {layers_until} layers (layer {next_change})")
-                            sys.stdout.flush()
+                            logger.info(f"Next change in {layers_until} layers (layer {next_change})")
+                            self._send_status_update("MONITOR", f"Next change in {layers_until} layers",
+                                                   {"layers_until": layers_until, "next_layer": next_change})
 
                 # Check if print is complete
                 if self._is_print_complete(status):
-                    print("\n[MONITOR] PRINT COMPLETED!")
-                    sys.stdout.flush()
+                    logger.info("PRINT COMPLETED!")
+                    self._send_status_update("MONITOR", "PRINT COMPLETED!", {"status": "complete"})
                     break
 
-                # Wait 5 seconds (no log spam)
-                time.sleep(5)
+                # Wait for next cycle or stop signal
+                if self._stop_event.wait(self.poll_interval):
+                    break
 
-        except KeyboardInterrupt:
-            print("\nMonitoring stopped by user")
-            return True  # Clean exit
+            logger.info("Monitoring loop completed")
+
         except Exception as e:
-            print(f"\nCRITICAL ERROR: {e}")
-            import traceback
-            traceback.print_exc()
-            return False  # Error exit
-            
+            logger.error(f"Critical error in monitoring loop: {e}", exc_info=True)
+            self._send_status_update("MONITOR", f"Critical error: {e}", level="error")
+            with self._state_lock:
+                self.state = PrintManagerState.ERROR
+
+        finally:
+            with self._state_lock:
+                if self.state != PrintManagerState.ERROR:
+                    self.state = PrintManagerState.IDLE
+            logger.info("Monitoring loop ended")
+
     def _get_printer_status(self):
         """Get current printer status via uart-wifi."""
         try:
-            # Use the printer_comms module
+            if printer_comms is None:
+                logger.error("printer_comms module not available")
+                return None
             return printer_comms.get_status(self.printer_ip)
         except Exception as e:
-            print(f"Error getting printer status: {e}")
+            logger.debug(f"Error getting printer status: {e}")
             return None
-            
-    def _extract_current_layer(self, status):
+
+    def _extract_current_layer(self, status) -> Optional[int]:
         """
         Extract current layer from status response.
 
@@ -341,15 +533,12 @@ class PrintManager:
             status: MonoXStatus object or string
 
         Returns:
-            int: Layer number or None if parsing fails
+            Layer number or None if parsing fails
         """
         try:
-            # Extract layer with minimal logging
-
             # Handle MonoXStatus object directly
             if hasattr(status, 'current_layer'):
                 layer_num = status.current_layer
-                # Found current_layer attribute
 
                 # Convert to int if it's a string
                 if isinstance(layer_num, str) and layer_num.isdigit():
@@ -367,34 +556,27 @@ class PrintManager:
 
             # If no current_layer attribute, check other attributes
             if hasattr(status, 'percent_complete') and hasattr(status, 'status'):
-                # Check if print just started
-
                 # If just started printing, assume layer 1
                 if status.status in ['print', 'printing'] and str(getattr(status, 'percent_complete', '0')) == '0':
-                    # Print just started - assume layer 1
                     return 1
 
             # Fallback to string parsing
             status_str = str(status)
-            # Try string parsing as fallback
 
-            # Look for current_layer field in the status string
             import re
-
             # Try multiple patterns to find current layer
             patterns = [
-                r'current_layer:\s*(\d+)',        # current_layer: 123
-                r'current_lay[er]*:\s*(\d+)',     # current_lay: 123 (truncated)
-                r'layer:\s*(\d+)',                # layer: 123
-                r'current_layer\s*=\s*(\d+)',     # current_layer = 123
-                r'current_layer":\s*(\d+)',       # "current_layer": 123
+                r'current_layer:\s*(\d+)',
+                r'current_lay[er]*:\s*(\d+)',
+                r'layer:\s*(\d+)',
+                r'current_layer\s*=\s*(\d+)',
+                r'current_layer":\s*(\d+)',
             ]
 
             for pattern in patterns:
                 match = re.search(pattern, status_str, re.IGNORECASE)
                 if match:
                     layer_num = int(match.group(1))
-                    # Found layer using pattern
                     if layer_num <= 0:
                         return None
                     return layer_num
@@ -403,137 +585,151 @@ class PrintManager:
             current_match = re.search(r'current.*?(\d+)', status_str, re.IGNORECASE)
             if current_match:
                 layer_num = int(current_match.group(1))
-                # Found layer using fallback pattern
                 if layer_num <= 0:
                     return None
                 return layer_num
 
-            # Could not extract layer number
             return None
 
         except Exception as e:
-            print(f"💥 Error extracting layer: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.debug(f"Error extracting layer: {e}")
             return None
-            
-    def _handle_material_change(self, material):
+
+    def _handle_material_change(self, material: str) -> bool:
         """
         Execute material change: pause -> change -> resume.
 
         Args:
-            material (str): Target material (A, B, C, D)
+            material: Target material (A, B, C, D)
 
         Returns:
-            bool: True if successful
+            True if successful
         """
         try:
-            print(f"[MATERIAL CHANGE] Starting material change to {material}...")
-            sys.stdout.flush()
+            logger.info(f"Starting material change to {material}...")
+            self._send_status_update("MATERIAL_CHANGE", f"Starting change to {material}", {"material": material})
 
             # Step 1: Pause printer
-            print("[MATERIAL CHANGE] Step 1: Pausing printer...")
-            sys.stdout.flush()
+            logger.info("Step 1: Pausing printer...")
+            self._send_status_update("MATERIAL_CHANGE", "Pausing printer...")
+
             if not self._pause_printer():
-                print("[MATERIAL CHANGE] ERROR: Could not pause printer")
-                sys.stdout.flush()
+                logger.error("Could not pause printer")
+                self._send_status_update("MATERIAL_CHANGE", "ERROR: Could not pause printer", level="error")
                 return False
 
-            # Step 2: Wait for bed to rise after pause
-            print("[MATERIAL CHANGE] Step 2: Ensuring bed is in raised position...")
-            sys.stdout.flush()
+            # Step 2: Wait for bed to rise
+            logger.info("Step 2: Waiting for bed to reach raised position...")
+            self._send_status_update("MATERIAL_CHANGE", "Waiting for bed positioning...")
             self._wait_for_bed_raised()
 
-            # Step 3: Execute material change pumps
-            print("[MATERIAL CHANGE] Step 3: Starting material change pumps...")
-            sys.stdout.flush()
+            # Step 3: Execute material change
+            logger.info("Step 3: Starting pump sequence...")
+            self._send_status_update("MATERIAL_CHANGE", "Starting pump sequence...")
+
+            if mmu_control is None:
+                logger.error("mmu_control module not available")
+                self._send_status_update("MATERIAL_CHANGE", "ERROR: MMU control not available", level="error")
+                return False
+
             success = mmu_control.change_material(material)
 
             if success:
-                print("[MATERIAL CHANGE] ✓ Pump sequence completed successfully")
-                sys.stdout.flush()
+                logger.info("✓ Pump sequence completed successfully")
+                self._send_status_update("MATERIAL_CHANGE", "✓ Pump sequence completed")
             else:
-                print("[MATERIAL CHANGE] ERROR: Pump sequence failed - NOT resuming printer")
-                sys.stdout.flush()
+                logger.error("Pump sequence failed - NOT resuming printer")
+                self._send_status_update("MATERIAL_CHANGE", "ERROR: Pump sequence failed", level="error")
                 return False
 
             # Step 4: Resume printer
-            print("Step 4: Resuming printer...")
+            logger.info("Step 4: Resuming printer...")
+            self._send_status_update("MATERIAL_CHANGE", "Resuming printer...")
+
             if self._resume_printer():
-                print(f"✓ Material change to {material} completed successfully")
+                logger.info(f"✓ Material change to {material} completed successfully")
+                self._send_status_update("MATERIAL_CHANGE", f"✓ Material change to {material} completed")
                 return True
             else:
-                print("ERROR: Could not resume printer - manual intervention required")
+                logger.error("Could not resume printer - manual intervention required")
+                self._send_status_update("MATERIAL_CHANGE", "ERROR: Could not resume printer", level="error")
                 return False
 
         except Exception as e:
-            print(f"ERROR: Material change failed: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Material change failed: {e}", exc_info=True)
+            self._send_status_update("MATERIAL_CHANGE", f"ERROR: Material change failed: {e}", level="error")
             return False
-            
-    def _pause_printer(self):
+
+    def _pause_printer(self) -> bool:
         """Pause printer via uart-wifi."""
         try:
+            if printer_comms is None:
+                return False
             return printer_comms.pause_print(self.printer_ip)
         except Exception as e:
-            print(f"Error pausing printer: {e}")
+            logger.error(f"Error pausing printer: {e}")
             return False
-            
-    def _resume_printer(self):
+
+    def _resume_printer(self) -> bool:
         """Resume printer via uart-wifi."""
         try:
+            if printer_comms is None:
+                return False
             return printer_comms.resume_print(self.printer_ip)
         except Exception as e:
-            print(f"Error resuming printer: {e}")
+            logger.error(f"Error resuming printer: {e}")
             return False
 
     def _wait_for_bed_raised(self):
         """
         Wait for bed to reach raised position after pause.
 
-        After pausing, the printer needs time to raise the bed to the top position
-        before material change operations can begin. This method implements a
-        robust wait with status verification.
+        Implements robust wait with status verification and progress updates.
         """
-        print("  Waiting for bed to reach raised position...")
+        logger.info("Waiting for bed to reach raised position...")
+        self._send_status_update("MATERIAL_CHANGE", "Bed positioning in progress...")
 
         # Initial wait for pause command to take effect
         time.sleep(2)
 
         # Extended wait for mechanical bed movement
-        # SLA printers typically take 10-15 seconds to raise bed to top
         bed_raise_time = 15
-        print(f"  Allowing {bed_raise_time} seconds for bed movement...")
+        logger.info(f"Allowing {bed_raise_time} seconds for bed movement...")
 
         for i in range(bed_raise_time):
-            time.sleep(1)
+            if self._stop_event.wait(1.0):  # Respect stop signal
+                return
+
             if (i + 1) % 5 == 0:  # Progress update every 5 seconds
-                print(f"  Bed positioning: {i + 1}/{bed_raise_time} seconds")
+                progress_msg = f"Bed positioning: {i + 1}/{bed_raise_time} seconds"
+                logger.info(progress_msg)
+                self._send_status_update("MATERIAL_CHANGE", progress_msg)
 
         # Verify printer is still paused
         try:
             status = self._get_printer_status()
             if status and hasattr(status, 'status'):
                 if status.status.lower() == 'pause':
-                    print("  ✓ Bed should now be in raised position, printer still paused")
+                    logger.info("✓ Bed should now be in raised position, printer still paused")
+                    self._send_status_update("MATERIAL_CHANGE", "✓ Bed positioned, printer paused")
                 else:
-                    print(f"  WARNING: Expected paused status but got: {status.status}")
+                    logger.warning(f"Expected paused status but got: {status.status}")
+                    self._send_status_update("MATERIAL_CHANGE", f"WARNING: Unexpected status: {status.status}", level="warning")
             else:
-                print("  WARNING: Could not verify pause status")
+                logger.warning("Could not verify pause status")
+                self._send_status_update("MATERIAL_CHANGE", "WARNING: Could not verify pause status", level="warning")
         except Exception as e:
-            print(f"  WARNING: Error checking pause status: {e}")
+            logger.warning(f"Error checking pause status: {e}")
 
         # Additional safety buffer
-        print("  Adding 3-second safety buffer...")
+        logger.info("Adding safety buffer...")
         time.sleep(3)
-        print("  ✓ Bed positioning complete - ready for material change")
+        logger.info("✓ Bed positioning complete - ready for material change")
+        self._send_status_update("MATERIAL_CHANGE", "✓ Ready for material change")
 
-    def _is_print_complete(self, status):
+    def _is_print_complete(self, status) -> bool:
         """Check if print is complete based on status."""
         try:
-            # Check if print is complete
-
             # Handle MonoXStatus object
             if hasattr(status, 'status'):
                 printer_status = status.status
@@ -541,179 +737,100 @@ class PrintManager:
                 current_layer = getattr(status, 'current_layer', 0)
                 total_layers = getattr(status, 'total_layers', 0)
 
-                # Status check
-
-                # Print is complete if status is specifically "stop" or "complete" or "finished"
-                # AND we're at 100% complete OR we've reached the final layer
+                # Print is complete if status is specifically "complete" or "finished"
                 if printer_status.lower() in ['complete', 'finished', 'done']:
-                    # Print complete
                     return True
 
                 if printer_status.lower() == 'stop' and percent >= 100:
-                    # Print complete
                     return True
 
                 if total_layers > 0 and current_layer >= total_layers and percent >= 99:
-                    # Print complete
                     return True
 
                 # Print is NOT complete if actively printing
                 if printer_status.lower() in ['print', 'printing']:
-                    # Print in progress
                     return False
 
                 # Print is NOT complete if stopped but not at end
                 if printer_status.lower() == 'stop' and percent < 100:
-                    # Print paused but not complete
                     return False
 
-            # Fallback to string checking (but be more specific)
+            # Fallback to string checking
             status_str = str(status).lower()
             if 'status: complete' in status_str or 'status: finished' in status_str:
-                # Print complete
                 return True
 
-            # Print not complete
             return False
 
         except Exception as e:
-            print(f"Error checking print completion: {e}")
+            logger.debug(f"Error checking print completion: {e}")
             return False
 
-
-print("DEBUG: PrintManager class defined successfully")
-sys.stdout.flush()
 
 def main():
     """
-    Command-line interface for automated multi-material printing.
+    Command-line interface for the modernized print manager.
 
-    Usage: python print_manager.py [-r recipe.txt] [-c config.ini] [-i printer_ip]
-
-    Monitors printer via uart-wifi and triggers material changes at specified layers.
+    Demonstrates usage and provides CLI access for testing.
     """
     import sys
+
+    # Set up logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+        datefmt='%H:%M:%S'
+    )
+
+    parser = argparse.ArgumentParser(description='Multi-Material Print Manager')
+    parser.add_argument('--recipe', '-r', help='Path to recipe file')
+    parser.add_argument('--config', '-c', help='Path to config file')
+    parser.add_argument('--printer-ip', '-i', help='Printer IP address override')
+    parser.add_argument('--debug', '-d', action='store_true', help='Enable debug logging')
+
+    args = parser.parse_args()
+
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+
     try:
-        print("DEBUG: main() function started")
-        sys.stdout.flush()
+        # Create manager
+        manager = PrintManager(args.config)
+        logger.info("PrintManager created successfully")
 
-        print("=== PRINT MANAGER STARTUP ===")
-        print(f"Python path: {sys.path}")
-        print(f"Working directory: {os.getcwd()}")
+        # Load recipe
+        recipe_path = args.recipe or manager._find_config_path().parent / 'recipe.txt'
+        if not manager.load_recipe(str(recipe_path)):
+            logger.error("Failed to load recipe")
+            return 1
 
-        print("DEBUG: About to parse arguments...")
-        sys.stdout.flush()
+        # Start monitoring
+        printer_ip = args.printer_ip or manager.printer_ip
+        if not manager.start_monitoring(printer_ip):
+            logger.error("Failed to start monitoring")
+            return 1
+
+        # Monitor status updates
+        logger.info("Monitoring started - press Ctrl+C to stop")
+        try:
+            while manager.is_running():
+                try:
+                    update = manager.get_status_update(timeout=1.0)
+                    print(f"[{update.timestamp:.1f}] {update.tag}: {update.message}")
+                except queue.Empty:
+                    pass
+        except KeyboardInterrupt:
+            logger.info("Stopping monitoring...")
+
+        # Clean shutdown
+        manager.stop_monitoring()
+        logger.info("Print manager completed successfully")
+        return 0
 
     except Exception as e:
-        print(f"CRASH in main() startup: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.stdout.flush()
-        sys.exit(15)
-
-    try:
-        print("Step 1: Parsing arguments...")
-        sys.stdout.flush()
-
-        try:
-            parser = argparse.ArgumentParser(description='Multi-Material Print Manager')
-            print("DEBUG: ArgumentParser created")
-            sys.stdout.flush()
-
-            parser.add_argument('--recipe', '-r', help='Path to recipe file')
-            parser.add_argument('--config', '-c', help='Path to config file')
-            parser.add_argument('--printer-ip', '-i', help='Printer IP address override')
-            print("DEBUG: Arguments defined")
-            sys.stdout.flush()
-
-            args = parser.parse_args()
-            print("DEBUG: Arguments parsed successfully")
-            sys.stdout.flush()
-
-        except SystemExit as e:
-            print(f"DEBUG: ArgumentParser SystemExit: {e}")
-            print(f"DEBUG: Exit code: {e.code}")
-            # Don't re-raise SystemExit, handle gracefully
-            sys.exit(e.code)
-        except Exception as e:
-            print(f"DEBUG: Exception during argument parsing: {e}")
-            import traceback
-            traceback.print_exc()
-            sys.stdout.flush()
-            raise
-
-        print(f"Arguments: recipe={args.recipe}, config={args.config}, printer_ip={args.printer_ip}")
-        sys.stdout.flush()
-
-        print("Step 2: Creating print manager...")
-        sys.stdout.flush()
-
-        try:
-            print("DEBUG: About to call PrintManager constructor")
-            sys.stdout.flush()
-            manager = PrintManager(args.config)
-            print("DEBUG: PrintManager constructor completed")
-            sys.stdout.flush()
-        except Exception as e:
-            print(f"DEBUG: PrintManager constructor crashed: {e}")
-            import traceback
-            traceback.print_exc()
-            sys.stdout.flush()
-            raise
-
-        print("✓ Print manager created successfully")
-        sys.stdout.flush()
-
-        print("Step 3: Setting printer IP...")
-        sys.stdout.flush()
-
-        try:
-            if args.printer_ip:
-                manager.printer_ip = args.printer_ip
-                print(f"✓ Printer IP set to: {args.printer_ip}")
-            else:
-                print(f"✓ Using default printer IP: {manager.printer_ip}")
-            sys.stdout.flush()
-
-            print("Step 4: Resolving recipe path...")
-            sys.stdout.flush()
-
-            recipe_path = args.recipe or manager._find_config_path().parent / 'recipe.txt'
-            print(f"✓ Recipe path: {recipe_path}")
-            sys.stdout.flush()
-
-            print("Step 5: Starting monitoring...")
-            sys.stdout.flush()
-
-            success = manager.start_monitoring(recipe_path)
-            print("DEBUG: start_monitoring() returned")
-            sys.stdout.flush()
-
-        except Exception as e:
-            print(f"DEBUG: Exception in steps 3-5: {e}")
-            import traceback
-            traceback.print_exc()
-            sys.stdout.flush()
-            raise
-
-        # Exit with appropriate code
-        if success:
-            print("Print manager completed successfully")
-            sys.exit(0)
-        else:
-            print("Print manager exited with errors")
-            sys.exit(1)
-
-    except Exception as e:
-        print(f"FATAL ERROR in print_manager main(): {e}")
-        print(f"Error type: {type(e).__name__}")
-        import traceback
-        print("Traceback:")
-        traceback.print_exc()
-        sys.exit(15)
+        logger.error(f"Fatal error: {e}", exc_info=True)
+        return 1
 
 
 if __name__ == "__main__":
-    print("DEBUG: About to call main() function")
-    sys.stdout.flush()
-    main()
+    sys.exit(main())

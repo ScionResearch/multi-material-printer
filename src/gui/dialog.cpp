@@ -16,6 +16,7 @@
 #include <QInputDialog>
 #include <QStringList>
 #include <QDateTime>
+#include <QRegularExpression>
 
 Dialog::Dialog(QWidget *parent)
     : QDialog(parent), ui(new Ui::Dialog), pythonProcess(nullptr), statusTimer(nullptr)
@@ -169,13 +170,54 @@ void Dialog::on_startPr_clicked()
         logMessage("INIT", QString("Printer IP: %1").arg(printerIP));
 
         pythonProcess = new QProcess(this);
+
+        // Enhanced output capture for structured logging from new print manager
         connect(pythonProcess, &QProcess::readyReadStandardOutput, this, [this]() {
             QString output = pythonProcess->readAllStandardOutput();
-            // Add timestamps to each line from Python output
             QStringList lines = output.split('\n', Qt::SkipEmptyParts);
+
             for (const QString &line : lines) {
-                if (!line.trimmed().isEmpty()) {
-                    logMessage("PRINT", line.trimmed());
+                QString trimmedLine = line.trimmed();
+                if (trimmedLine.isEmpty()) continue;
+
+                // Parse structured log messages from new print manager
+                if (trimmedLine.contains("[INFO]") || trimmedLine.contains("[ERROR]") || trimmedLine.contains("[WARNING]")) {
+                    // Extract timestamp and message from logging format
+                    QRegularExpression logRegex(R"((\d{2}:\d{2}:\d{2}) \[(\w+)\] [\w\d._]+: (.+))");
+                    QRegularExpressionMatch match = logRegex.match(trimmedLine);
+
+                    if (match.hasMatch()) {
+                        QString level = match.captured(2);
+                        QString message = match.captured(3);
+
+                        // Map log levels to GUI tags
+                        QString tag = "PRINT";
+                        if (level == "ERROR") tag = "ERROR";
+                        else if (level == "WARNING") tag = "WARN";
+                        else if (message.contains("Material change")) tag = "MATERIAL";
+                        else if (message.contains("Current layer")) tag = "MONITOR";
+
+                        logMessage(tag, message);
+                    } else {
+                        logMessage("PRINT", trimmedLine);
+                    }
+                }
+                // Handle status update format: [timestamp] TAG: message
+                else if (trimmedLine.contains("] ") && trimmedLine.contains(":")) {
+                    QRegularExpression statusRegex(R"(\[[\d.]+\] (\w+): (.+))");
+                    QRegularExpressionMatch match = statusRegex.match(trimmedLine);
+
+                    if (match.hasMatch()) {
+                        QString tag = match.captured(1);
+                        QString message = match.captured(2);
+                        logMessage(tag, message);
+                    } else {
+                        logMessage("PRINT", trimmedLine);
+                    }
+                }
+                else {
+                    // Fallback for any other output
+                    logMessage("PRINT", trimmedLine);
                 }
             }
         });
@@ -183,7 +225,12 @@ void Dialog::on_startPr_clicked()
         connect(pythonProcess, &QProcess::readyReadStandardError, this, [this]() {
             QString error = pythonProcess->readAllStandardError();
             if (!error.isEmpty()) {
-                logMessage("ERROR", error.trimmed());
+                QStringList errorLines = error.split('\n', Qt::SkipEmptyParts);
+                for (const QString &line : errorLines) {
+                    if (!line.trimmed().isEmpty()) {
+                        logMessage("ERROR", line.trimmed());
+                    }
+                }
             }
         });
 
@@ -206,11 +253,12 @@ void Dialog::on_startPr_clicked()
         statusTimer->stop();
     }
 
-    // Build command arguments for print_manager.py
+    // Build command arguments for modernized print_manager.py
     QStringList arguments;
     arguments << scriptPath;
     arguments << "--recipe" << recipePath;
     arguments << "--printer-ip" << printerIP;
+    arguments << "--debug";  // Enable debug logging for GUI visibility
 
     logMessage("INIT", "Starting automated multi-material printing");
 
