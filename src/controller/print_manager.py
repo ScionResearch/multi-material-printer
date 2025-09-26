@@ -542,6 +542,9 @@ class PrintManager:
             return False
 
 
+print("DEBUG: PrintManager class defined successfully")
+sys.stdout.flush()
+
 def main():
     """
     Command-line interface for automated multi-material printing.
@@ -601,4 +604,6 @@ def main():
 
 
 if __name__ == "__main__":
+    print("DEBUG: About to call main() function")
+    sys.stdout.flush()
     main()
