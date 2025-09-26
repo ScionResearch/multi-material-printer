@@ -96,3 +96,15 @@ This document outlines the current development status and remaining tasks for th
   - Web interface for status checking
   - Notification systems
   - Mobile integration considerations
+
+---
+Future Enhancements (not yet implemented):
+1. Introduce a simple line-based JSON protocol: each status message = one JSON object.
+2. Heartbeat ping every N seconds to detect stalled processes.
+3. Graceful cancellation signal via temp file or dedicated command channel.
+Future Enhancement (not yet implemented): Add a `--validate-recipe` flag to `print_manager.py` to perform these checks before starting.
+
+ - Current status polling likely parses stdout lines (e.g., JSON or key=value—formalize format in future)
+ - Error handling: non-zero Python exit codes should surface a modal dialog (planned improvement if not implemented)
+ - Suggested log routing (future): Write structured logs to `logs/print_manager_<timestamp>.log` while still streaming to stdout for GUI consumption.
+ Planned Enhancement: Introduce a "mock printer" mode in `print_manager.py` to emulate layer advancement for local dry-runs (not yet implemented).
