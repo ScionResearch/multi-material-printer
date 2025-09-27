@@ -413,7 +413,6 @@ class PrintManager:
 
             while not self._stop_event.is_set():
                 loop_count += 1
-                self._send_status_update("AUTO", f"MONITOR LOOP #{loop_count} starting...")
 
                 # Get printer status (suppress debug output)
                 status = self._get_printer_status()
@@ -437,7 +436,6 @@ class PrintManager:
                     last_layer_logged = current_layer
 
                 # Check for material changes
-                self._send_status_update("AUTO", f"LAYER CHECK: current={current_layer}, recipe={list(self.recipe.keys())}, last={self._last_processed_layer}")
                 if current_layer in self.recipe and current_layer != self._last_processed_layer:
                     material = self.recipe[current_layer]
                     self._material_change_count += 1
