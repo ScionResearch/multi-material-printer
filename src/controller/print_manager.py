@@ -436,6 +436,7 @@ class PrintManager:
                     last_layer_logged = current_layer
 
                 # Check for material changes
+                self._send_status_update("DEBUG", f"Layer check: current={current_layer}, recipe_layers={list(self.recipe.keys())}, last_processed={self._last_processed_layer}")
                 if current_layer in self.recipe and current_layer != self._last_processed_layer:
                     material = self.recipe[current_layer]
                     self._material_change_count += 1
