@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Scion Multi-Material Printer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Status Overview -->
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Print Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Printer Status</h6>
+                        <p class="fs-5" id="printer-status">
+                            <span class="badge bg-secondary">{{ status.printer_status }}</span>
+                        </p>
+
+                        <h6>Current Layer</h6>
+                        <p class="fs-4 fw-bold" id="current-layer">{{ status.current_layer }}</p>
+
+                        <h6>Progress</h6>
+                        <div class="progress mb-3" style="height: 25px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                 role="progressbar"
+                                 id="progress-bar"
+                                 style="width: {{ status.progress_percent }}%">
+                                <span id="progress-text">{{ "%.1f"|format(status.progress_percent) }}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h6>Active Material</h6>
+                        <p class="fs-5" id="current-material">
+                            <span class="badge bg-info">{{ status.current_material }}</span>
+                        </p>
+
+                        <h6>Next Material Change</h6>
+                        <p id="next-change">
+                            Material <strong>{{ status.next_material }}</strong> at layer <strong>{{ status.next_change_layer }}</strong>
+                        </p>
+
+                        <h6>Multi-Material Status</h6>
+                        <p id="mm-status">
+                            {% if status.mm_active %}
+                                <span class="badge bg-success">Active</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Stopped</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Recipe Display -->
+        <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-list-check"></i> Active Recipe</h5>
+            </div>
+            <div class="card-body">
+                {% if recipe %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Layer</th>
+                                    <th>Material</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recipe-table">
+                                {% for item in recipe %}
+                                <tr data-layer="{{ item.layer }}">
+                                    <td>{{ item.layer }}</td>
+                                    <td>
+                                        <span class="badge bg-primary">{{ item.material }}</span>
+                                    </td>
+                                    <td>
+                                        {% if item.layer <= status.current_layer %}
+                                            <span class="badge bg-success">Completed</span>
+                                        {% elif item.layer == status.next_change_layer %}
+                                            <span class="badge bg-warning">Next</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">Pending</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        No recipe loaded. <a href="{{ url_for('recipe_page') }}" class="alert-link">Create a recipe</a> to begin multi-material printing.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="bi bi-terminal"></i> Activity Log</h5>
+            </div>
+            <div class="card-body">
+                <div id="activity-log" class="bg-dark text-light p-3 rounded" style="height: 300px; overflow-y: auto; font-family: monospace;">
+                    <div class="log-entry text-info">[{{ status.last_update }}] System initialized</div>
+                    <div class="log-entry">Waiting for printer status updates...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="col-lg-4">
+        <!-- Quick Controls -->
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="bi bi-play-circle"></i> Quick Controls</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-success btn-lg" onclick="startMultiMaterial()">
+                        <i class="bi bi-play-fill"></i> Start Multi-Material
+                    </button>
+
+                    <button class="btn btn-danger" onclick="stopMultiMaterial()">
+                        <i class="bi bi-stop-fill"></i> Stop Multi-Material
+                    </button>
+
+                    <hr>
+
+                    <button class="btn btn-warning" onclick="printerControl('pause')">
+                        <i class="bi bi-pause-fill"></i> Pause Printer
+                    </button>
+
+                    <button class="btn btn-info" onclick="printerControl('resume')">
+                        <i class="bi bi-play-fill"></i> Resume Printer
+                    </button>
+
+                    <button class="btn btn-outline-danger" onclick="printerControl('stop')">
+                        <i class="bi bi-stop-fill"></i> Stop Printer
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Information -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-cpu"></i> System Info</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <td><strong>Printer Connection:</strong></td>
+                        <td>
+                            <span id="printer-connection" class="badge bg-secondary">
+                                {% if status.printer_connected %}bg-success">Connected{% else %}bg-danger">Disconnected{% endif %}
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Last Update:</strong></td>
+                        <td><small id="last-update">{{ status.last_update }}</small></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Recipe Items:</strong></td>
+                        <td>{{ recipe|length if recipe else 0 }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Navigation Links -->
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-arrow-right-circle"></i> Quick Links</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('recipe_page') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-plus-circle"></i> Create/Edit Recipe
+                    </a>
+                    <a href="{{ url_for('manual_page') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-gear"></i> Manual Controls
+                    </a>
+                    <button class="btn btn-outline-info" onclick="refreshStatus()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh Status
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Dashboard-specific JavaScript functions
+function startMultiMaterial() {
+    showAlert('Starting multi-material printing...', 'info');
+    // This will be implemented to start the print_manager.py process
+    fetch('/api/multi-material/start', {method: 'POST'})
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Multi-material printing started successfully', 'success');
+            } else {
+                showAlert('Failed to start multi-material printing: ' + data.message, 'danger');
+            }
+        })
+        .catch(error => {
+            showAlert('Error starting multi-material printing: ' + error, 'danger');
+        });
+}
+
+function stopMultiMaterial() {
+    showAlert('Stopping multi-material printing...', 'warning');
+    // This will be implemented to stop the print_manager.py process
+    fetch('/api/multi-material/stop', {method: 'POST'})
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Multi-material printing stopped', 'warning');
+            } else {
+                showAlert('Failed to stop multi-material printing: ' + data.message, 'danger');
+            }
+        });
+}
+
+function printerControl(action) {
+    const actionText = action.charAt(0).toUpperCase() + action.slice(1);
+    showAlert(`${actionText}ing printer...`, 'info');
+
+    fetch(`/api/printer/${action}`, {method: 'POST'})
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(`Printer ${action}d successfully`, 'success');
+            } else {
+                showAlert(`Failed to ${action} printer: ${data.message}`, 'danger');
+            }
+        })
+        .catch(error => {
+            showAlert(`Error ${action}ing printer: ${error}`, 'danger');
+        });
+}
+
+function refreshStatus() {
+    fetch('/api/status')
+        .then(response => response.json())
+        .then(data => updateStatus(data))
+        .catch(error => {
+            showAlert('Error refreshing status: ' + error, 'danger');
+        });
+}
+
+function updateStatus(status) {
+    // Update printer status
+    document.getElementById('printer-status').innerHTML =
+        `<span class="badge ${getStatusColor(status.printer_status)}">${status.printer_status}</span>`;
+
+    // Update current layer
+    document.getElementById('current-layer').textContent = status.current_layer;
+
+    // Update progress bar
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    progressBar.style.width = status.progress_percent + '%';
+    progressText.textContent = status.progress_percent.toFixed(1) + '%';
+
+    // Update material info
+    document.getElementById('current-material').innerHTML =
+        `<span class="badge bg-info">${status.current_material}</span>`;
+
+    document.getElementById('next-change').innerHTML =
+        `Material <strong>${status.next_material}</strong> at layer <strong>${status.next_change_layer}</strong>`;
+
+    // Update connection status
+    const connectionBadge = document.getElementById('printer-connection');
+    if (status.printer_connected) {
+        connectionBadge.className = 'badge bg-success';
+        connectionBadge.textContent = 'Connected';
+    } else {
+        connectionBadge.className = 'badge bg-danger';
+        connectionBadge.textContent = 'Disconnected';
+    }
+
+    // Update MM status
+    const mmStatus = document.getElementById('mm-status');
+    mmStatus.innerHTML = status.mm_active ?
+        '<span class="badge bg-success">Active</span>' :
+        '<span class="badge bg-secondary">Stopped</span>';
+
+    // Update last update time
+    document.getElementById('last-update').textContent = status.last_update;
+
+    // Update recipe table status
+    updateRecipeTable(status.current_layer, status.next_change_layer);
+}
+
+function updateRecipeTable(currentLayer, nextChangeLayer) {
+    const rows = document.querySelectorAll('#recipe-table tr');
+    rows.forEach(row => {
+        const layer = parseInt(row.dataset.layer);
+        const statusCell = row.querySelector('td:last-child');
+
+        if (layer <= currentLayer) {
+            statusCell.innerHTML = '<span class="badge bg-success">Completed</span>';
+        } else if (layer === nextChangeLayer) {
+            statusCell.innerHTML = '<span class="badge bg-warning">Next</span>';
+        } else {
+            statusCell.innerHTML = '<span class="badge bg-light text-dark">Pending</span>';
+        }
+    });
+}
+
+function getStatusColor(status) {
+    switch(status.toLowerCase()) {
+        case 'printing': return 'bg-success';
+        case 'paused': return 'bg-warning';
+        case 'stopped': return 'bg-danger';
+        case 'idle': return 'bg-info';
+        default: return 'bg-secondary';
+    }
+}
+
+function addLogEntry(message, type = 'info') {
+    const log = document.getElementById('activity-log');
+    const timestamp = new Date().toLocaleTimeString();
+    const typeClass = type === 'error' ? 'text-danger' :
+                     type === 'warning' ? 'text-warning' :
+                     type === 'success' ? 'text-success' : 'text-info';
+
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${typeClass}`;
+    entry.textContent = `[${timestamp}] ${message}`;
+
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+
+    // Keep only last 100 entries
+    const entries = log.querySelectorAll('.log-entry');
+    if (entries.length > 100) {
+        entries[0].remove();
+    }
+}
+
+// Socket.IO event handlers specific to dashboard
+socket.on('status_update', function(data) {
+    updateStatus(data);
+    addLogEntry(`Status update: Layer ${data.current_layer}, ${data.printer_status}`);
+});
+
+socket.on('material_change', function(data) {
+    addLogEntry(`Material change: ${data.from_material} → ${data.to_material} at layer ${data.layer}`, 'success');
+});
+
+socket.on('system_error', function(data) {
+    addLogEntry(`Error: ${data.message}`, 'error');
+    showAlert('System error: ' + data.message, 'danger');
+});
+</script>
+{% endblock %}

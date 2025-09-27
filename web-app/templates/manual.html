@@ -1,0 +1,696 @@
+{% extends "base.html" %}
+
+{% block title %}Manual Controls & Sequence Debug - Scion Multi-Material Printer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Sequence Control Panel -->
+    <div class="col-lg-8">
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="bi bi-gear-wide-connected"></i> Material Change Sequence Control</h5>
+            </div>
+            <div class="card-body">
+                <!-- Sequence Steps Visualization -->
+                <div class="mb-4">
+                    <h6>Current Sequence: <span id="current-sequence">None Active</span></h6>
+                    <div class="progress mb-3" style="height: 30px;">
+                        <div id="sequence-progress" class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+                             role="progressbar" style="width: 0%">
+                            <span id="sequence-step-text">Ready</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sequence Steps with Timing -->
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="card border-danger" id="step-drain">
+                            <div class="card-header bg-danger text-white text-center">
+                                <h6 class="mb-0">1. DRAIN</h6>
+                            </div>
+                            <div class="card-body text-center">
+                                <div class="mb-2">
+                                    <input type="number" class="form-control form-control-sm"
+                                           id="drain-time" value="30" min="1" max="300">
+                                    <small class="text-muted">seconds</small>
+                                </div>
+                                <button class="btn btn-sm btn-outline-danger w-100" onclick="runSingleStep('drain')">
+                                    <i class="bi bi-play"></i> Test Drain
+                                </button>
+                                <div class="mt-2">
+                                    <small id="drain-status" class="text-muted">Ready</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="card border-primary" id="step-fill">
+                            <div class="card-header bg-primary text-white text-center">
+                                <h6 class="mb-0">2. FILL</h6>
+                            </div>
+                            <div class="card-body text-center">
+                                <div class="mb-2">
+                                    <select class="form-select form-select-sm mb-1" id="fill-material">
+                                        <option value="A">Material A</option>
+                                        <option value="B">Material B</option>
+                                        <option value="C">Material C</option>
+                                        <option value="D">Material D</option>
+                                    </select>
+                                    <input type="number" class="form-control form-control-sm"
+                                           id="fill-time" value="25" min="1" max="300">
+                                    <small class="text-muted">seconds</small>
+                                </div>
+                                <button class="btn btn-sm btn-outline-primary w-100" onclick="runSingleStep('fill')">
+                                    <i class="bi bi-play"></i> Test Fill
+                                </button>
+                                <div class="mt-2">
+                                    <small id="fill-status" class="text-muted">Ready</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="card border-success" id="step-mix">
+                            <div class="card-header bg-success text-white text-center">
+                                <h6 class="mb-0">3. MIX</h6>
+                            </div>
+                            <div class="card-body text-center">
+                                <div class="mb-2">
+                                    <input type="number" class="form-control form-control-sm"
+                                           id="mix-time" value="10" min="0" max="120">
+                                    <small class="text-muted">seconds</small>
+                                </div>
+                                <button class="btn btn-sm btn-outline-success w-100" onclick="runSingleStep('mix')">
+                                    <i class="bi bi-play"></i> Test Mix
+                                </button>
+                                <div class="mt-2">
+                                    <small id="mix-status" class="text-muted">Ready</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-3">
+                        <div class="card border-info" id="step-settle">
+                            <div class="card-header bg-info text-white text-center">
+                                <h6 class="mb-0">4. SETTLE</h6>
+                            </div>
+                            <div class="card-body text-center">
+                                <div class="mb-2">
+                                    <input type="number" class="form-control form-control-sm"
+                                           id="settle-time" value="5" min="0" max="60">
+                                    <small class="text-muted">seconds</small>
+                                </div>
+                                <button class="btn btn-sm btn-outline-info w-100" onclick="runSingleStep('settle')">
+                                    <i class="bi bi-play"></i> Test Settle
+                                </button>
+                                <div class="mt-2">
+                                    <small id="settle-status" class="text-muted">Ready</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Full Sequence Controls -->
+                <div class="mt-4 text-center">
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-success btn-lg" onclick="runFullSequence()">
+                            <i class="bi bi-play-circle"></i> Run Full Sequence
+                        </button>
+                        <button class="btn btn-warning" onclick="pauseSequence()">
+                            <i class="bi bi-pause-circle"></i> Pause
+                        </button>
+                        <button class="btn btn-danger" onclick="stopSequence()">
+                            <i class="bi bi-stop-circle"></i> Stop
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Timing Presets -->
+                <div class="mt-4">
+                    <h6>Timing Presets:</h6>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadPreset('fast')">Fast (60s)</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadPreset('normal')">Normal (70s)</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="loadPreset('thorough')">Thorough (90s)</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="savePreset()">Save Custom</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-time Process Monitor -->
+        <div class="card">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="bi bi-activity"></i> Process Monitor</h5>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <h6>Current Action</h6>
+                        <p class="fs-5" id="current-action">
+                            <span class="badge bg-secondary">Idle</span>
+                        </p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Step Progress</h6>
+                        <p class="fs-5" id="step-progress">0 / 0</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>Time Remaining</h6>
+                        <p class="fs-5" id="time-remaining">--:--</p>
+                    </div>
+                </div>
+
+                <!-- Live Log -->
+                <div id="process-log" class="bg-dark text-light p-3 rounded" style="height: 250px; overflow-y: auto; font-family: monospace;">
+                    <div class="log-entry text-info">[Ready] Material change sequence ready for testing</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="col-lg-4">
+        <!-- Emergency Controls -->
+        <div class="card mb-4 border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Emergency Controls</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-danger btn-lg" onclick="emergencyStop()">
+                        <i class="bi bi-hand-thumbs-down"></i> EMERGENCY STOP
+                    </button>
+                    <button class="btn btn-warning" onclick="drainAll()">
+                        <i class="bi bi-arrow-down"></i> Drain All Pumps
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Individual Pump Controls -->
+        <div class="card mb-4">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-sliders"></i> Individual Pump Control</h5>
+            </div>
+            <div class="card-body">
+                <form id="pump-control-form">
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Pump</label>
+                            <select class="form-select" id="pump-select" required>
+                                <option value="">Select</option>
+                                <option value="A">Pump A</option>
+                                <option value="B">Pump B</option>
+                                <option value="C">Pump C</option>
+                                <option value="D">Pump D</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Direction</label>
+                            <select class="form-select" id="direction-select" required>
+                                <option value="">Select</option>
+                                <option value="F">Forward</option>
+                                <option value="R">Reverse</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Duration (seconds)</label>
+                        <input type="number" class="form-control" id="duration-input" min="1" max="300" required>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-play"></i> Run Pump
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Sequence Debugging -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-bug"></i> Debug Tools</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Debug Level</label>
+                    <select class="form-select" id="debug-level">
+                        <option value="basic">Basic</option>
+                        <option value="detailed" selected>Detailed</option>
+                        <option value="verbose">Verbose</option>
+                    </select>
+                </div>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-info" onclick="testConnections()">
+                        <i class="bi bi-wifi"></i> Test Connections
+                    </button>
+                    <button class="btn btn-outline-info" onclick="calibratePumps()">
+                        <i class="bi bi-speedometer2"></i> Calibrate Pumps
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="clearLog()">
+                        <i class="bi bi-trash"></i> Clear Log
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Printer Controls -->
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-printer"></i> Printer Controls</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-warning" onclick="printerControl('pause')">
+                        <i class="bi bi-pause"></i> Pause Print
+                    </button>
+                    <button class="btn btn-success" onclick="printerControl('resume')">
+                        <i class="bi bi-play"></i> Resume Print
+                    </button>
+                    <button class="btn btn-outline-danger" onclick="printerControl('stop')">
+                        <i class="bi bi-stop"></i> Stop Print
+                    </button>
+                    <hr>
+                    <button class="btn btn-outline-info" onclick="checkPrinterStatus()">
+                        <i class="bi bi-info-circle"></i> Check Status
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Sequence state management
+let currentSequence = null;
+let sequenceStep = 0;
+let stepTimer = null;
+let sequencePaused = false;
+
+// Timing presets
+const timingPresets = {
+    fast: { drain: 20, fill: 20, mix: 5, settle: 3 },
+    normal: { drain: 30, fill: 25, mix: 10, settle: 5 },
+    thorough: { drain: 45, fill: 35, mix: 15, settle: 8 }
+};
+
+// Individual pump control
+document.getElementById('pump-control-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const pump = document.getElementById('pump-select').value;
+    const direction = document.getElementById('direction-select').value;
+    const duration = parseInt(document.getElementById('duration-input').value);
+
+    if (!pump || !direction || !duration) {
+        showAlert('Please fill all fields', 'warning');
+        return;
+    }
+
+    runPump(pump, direction, duration);
+});
+
+function runPump(pump, direction, duration) {
+    const directionText = direction === 'F' ? 'Forward' : 'Reverse';
+    logProcess(`Starting Pump ${pump} ${directionText} for ${duration}s`, 'info');
+
+    fetch('/api/pump', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motor: pump, direction: direction, duration: duration })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            logProcess(`Pump ${pump} started successfully`, 'success');
+            showAlert(`Pump ${pump} running ${directionText.toLowerCase()} for ${duration}s`, 'success');
+        } else {
+            logProcess(`Pump ${pump} failed: ${data.message}`, 'error');
+            showAlert('Pump control failed: ' + data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        logProcess(`Pump ${pump} error: ${error}`, 'error');
+        showAlert('Error controlling pump: ' + error, 'danger');
+    });
+}
+
+function runSingleStep(step) {
+    const stepConfig = getStepConfig(step);
+    logProcess(`Testing step: ${step.toUpperCase()}`, 'info');
+
+    updateStepStatus(step, 'running');
+
+    if (step === 'drain') {
+        // Drain current material (reverse pump)
+        runPump('A', 'R', stepConfig.duration); // Assume pump A for now
+    } else if (step === 'fill') {
+        // Fill new material (forward pump)
+        const material = document.getElementById('fill-material').value;
+        runPump(material, 'F', stepConfig.duration);
+    } else if (step === 'mix') {
+        // Mix sequence (alternate directions)
+        logProcess(`Starting mix sequence for ${stepConfig.duration}s`, 'info');
+        // This would implement the mixing logic
+    } else if (step === 'settle') {
+        // Settle time (wait)
+        logProcess(`Settling for ${stepConfig.duration}s`, 'info');
+        setTimeout(() => {
+            updateStepStatus(step, 'completed');
+            logProcess(`Settle complete`, 'success');
+        }, stepConfig.duration * 1000);
+    }
+
+    // Simulate step completion
+    setTimeout(() => {
+        updateStepStatus(step, 'completed');
+    }, stepConfig.duration * 1000);
+}
+
+function getStepConfig(step) {
+    const configs = {
+        drain: { duration: parseInt(document.getElementById('drain-time').value) },
+        fill: {
+            duration: parseInt(document.getElementById('fill-time').value),
+            material: document.getElementById('fill-material').value
+        },
+        mix: { duration: parseInt(document.getElementById('mix-time').value) },
+        settle: { duration: parseInt(document.getElementById('settle-time').value) }
+    };
+    return configs[step];
+}
+
+function updateStepStatus(step, status) {
+    const statusElement = document.getElementById(`${step}-status`);
+    const stepCard = document.getElementById(`step-${step}`);
+
+    switch(status) {
+        case 'running':
+            statusElement.textContent = 'Running...';
+            statusElement.className = 'text-primary';
+            stepCard.classList.add('bg-light');
+            break;
+        case 'completed':
+            statusElement.textContent = 'Completed';
+            statusElement.className = 'text-success';
+            stepCard.classList.remove('bg-light');
+            break;
+        case 'error':
+            statusElement.textContent = 'Error';
+            statusElement.className = 'text-danger';
+            stepCard.classList.remove('bg-light');
+            break;
+        default:
+            statusElement.textContent = 'Ready';
+            statusElement.className = 'text-muted';
+            stepCard.classList.remove('bg-light');
+    }
+}
+
+function runFullSequence() {
+    if (currentSequence) {
+        showAlert('Sequence already running', 'warning');
+        return;
+    }
+
+    const fromMaterial = 'A'; // This would come from current state
+    const toMaterial = document.getElementById('fill-material').value;
+
+    logProcess(`Starting full material change sequence: ${fromMaterial} → ${toMaterial}`, 'info');
+
+    currentSequence = {
+        steps: ['drain', 'fill', 'mix', 'settle'],
+        fromMaterial: fromMaterial,
+        toMaterial: toMaterial,
+        startTime: Date.now()
+    };
+
+    sequenceStep = 0;
+    sequencePaused = false;
+
+    updateSequenceProgress(0, 'Starting sequence...');
+    executeNextStep();
+}
+
+function executeNextStep() {
+    if (sequencePaused || !currentSequence) return;
+
+    if (sequenceStep >= currentSequence.steps.length) {
+        // Sequence complete
+        completeSequence();
+        return;
+    }
+
+    const step = currentSequence.steps[sequenceStep];
+    const stepConfig = getStepConfig(step);
+
+    logProcess(`Executing step ${sequenceStep + 1}/4: ${step.toUpperCase()}`, 'info');
+    updateSequenceProgress((sequenceStep / currentSequence.steps.length) * 100,
+                          `Step ${sequenceStep + 1}: ${step.toUpperCase()}`);
+
+    // Update current action display
+    document.getElementById('current-action').innerHTML =
+        `<span class="badge bg-primary">${step.toUpperCase()}</span>`;
+
+    // Execute the step
+    runSingleStep(step);
+
+    // Set timer for next step
+    stepTimer = setTimeout(() => {
+        sequenceStep++;
+        executeNextStep();
+    }, stepConfig.duration * 1000);
+
+    // Update countdown
+    updateStepCountdown(stepConfig.duration);
+}
+
+function updateStepCountdown(duration) {
+    let remaining = duration;
+    const countdownInterval = setInterval(() => {
+        const minutes = Math.floor(remaining / 60);
+        const seconds = remaining % 60;
+        document.getElementById('time-remaining').textContent =
+            `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+        remaining--;
+
+        if (remaining < 0 || !currentSequence) {
+            clearInterval(countdownInterval);
+        }
+    }, 1000);
+}
+
+function pauseSequence() {
+    if (!currentSequence) return;
+
+    sequencePaused = !sequencePaused;
+
+    if (sequencePaused) {
+        clearTimeout(stepTimer);
+        logProcess('Sequence paused', 'warning');
+        showAlert('Sequence paused', 'warning');
+    } else {
+        logProcess('Sequence resumed', 'info');
+        executeNextStep();
+    }
+}
+
+function stopSequence() {
+    if (!currentSequence) return;
+
+    clearTimeout(stepTimer);
+    currentSequence = null;
+    sequenceStep = 0;
+    sequencePaused = false;
+
+    // Reset all step statuses
+    ['drain', 'fill', 'mix', 'settle'].forEach(step => {
+        updateStepStatus(step, 'ready');
+    });
+
+    updateSequenceProgress(0, 'Stopped');
+    document.getElementById('current-action').innerHTML = '<span class="badge bg-secondary">Idle</span>';
+    document.getElementById('time-remaining').textContent = '--:--';
+
+    logProcess('Sequence stopped', 'warning');
+    showAlert('Sequence stopped', 'warning');
+}
+
+function completeSequence() {
+    logProcess('Material change sequence completed successfully', 'success');
+    updateSequenceProgress(100, 'Complete');
+
+    currentSequence = null;
+    sequenceStep = 0;
+    document.getElementById('current-action').innerHTML = '<span class="badge bg-success">Complete</span>';
+
+    showAlert('Material change sequence completed!', 'success');
+}
+
+function updateSequenceProgress(percent, text) {
+    const progressBar = document.getElementById('sequence-progress');
+    const progressText = document.getElementById('sequence-step-text');
+
+    progressBar.style.width = percent + '%';
+    progressText.textContent = text;
+
+    // Change color based on progress
+    progressBar.className = 'progress-bar progress-bar-striped progress-bar-animated ';
+    if (percent === 100) {
+        progressBar.className += 'bg-success';
+    } else if (percent > 0) {
+        progressBar.className += 'bg-info';
+    } else {
+        progressBar.className += 'bg-secondary';
+    }
+}
+
+function loadPreset(presetName) {
+    const preset = timingPresets[presetName];
+    if (preset) {
+        document.getElementById('drain-time').value = preset.drain;
+        document.getElementById('fill-time').value = preset.fill;
+        document.getElementById('mix-time').value = preset.mix;
+        document.getElementById('settle-time').value = preset.settle;
+
+        logProcess(`Loaded ${presetName} timing preset`, 'info');
+        showAlert(`Loaded ${presetName} timing preset`, 'success');
+    }
+}
+
+function savePreset() {
+    // This would save current timing as custom preset
+    const customPreset = {
+        drain: parseInt(document.getElementById('drain-time').value),
+        fill: parseInt(document.getElementById('fill-time').value),
+        mix: parseInt(document.getElementById('mix-time').value),
+        settle: parseInt(document.getElementById('settle-time').value)
+    };
+
+    localStorage.setItem('customTiming', JSON.stringify(customPreset));
+    showAlert('Custom timing saved', 'success');
+}
+
+function emergencyStop() {
+    if (confirm('EMERGENCY STOP - This will halt all pumps and sequences. Continue?')) {
+        stopSequence();
+        logProcess('EMERGENCY STOP ACTIVATED', 'error');
+        showAlert('Emergency stop activated - all operations halted', 'danger');
+
+        // Send emergency stop to backend
+        fetch('/api/emergency-stop', { method: 'POST' })
+            .catch(error => console.error('Emergency stop error:', error));
+    }
+}
+
+function drainAll() {
+    logProcess('Draining all pumps...', 'warning');
+    ['A', 'B', 'C', 'D'].forEach(pump => {
+        runPump(pump, 'R', 10); // 10 second drain
+    });
+}
+
+function testConnections() {
+    logProcess('Testing printer and pump connections...', 'info');
+
+    fetch('/api/status')
+        .then(response => response.json())
+        .then(data => {
+            logProcess(`Printer: ${data.printer_connected ? 'Connected' : 'Disconnected'}`,
+                      data.printer_connected ? 'success' : 'error');
+        })
+        .catch(error => {
+            logProcess('Connection test failed: ' + error, 'error');
+        });
+}
+
+function calibratePumps() {
+    logProcess('Starting pump calibration sequence...', 'info');
+    showAlert('Pump calibration started - check process monitor', 'info');
+
+    // Run each pump for calibration
+    ['A', 'B', 'C', 'D'].forEach((pump, index) => {
+        setTimeout(() => {
+            logProcess(`Calibrating Pump ${pump}...`, 'info');
+            runPump(pump, 'F', 5);
+        }, index * 6000); // Stagger by 6 seconds
+    });
+}
+
+function printerControl(action) {
+    fetch(`/api/printer/${action}`, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                logProcess(`Printer ${action} successful`, 'success');
+                showAlert(`Printer ${action}d successfully`, 'success');
+            } else {
+                logProcess(`Printer ${action} failed: ${data.message}`, 'error');
+                showAlert(`Printer ${action} failed: ${data.message}`, 'danger');
+            }
+        })
+        .catch(error => {
+            logProcess(`Printer ${action} error: ${error}`, 'error');
+        });
+}
+
+function checkPrinterStatus() {
+    fetch('/api/status')
+        .then(response => response.json())
+        .then(data => {
+            logProcess(`Printer Status: ${data.printer_status}, Layer: ${data.current_layer}`, 'info');
+        })
+        .catch(error => {
+            logProcess('Status check failed: ' + error, 'error');
+        });
+}
+
+function logProcess(message, type = 'info') {
+    const log = document.getElementById('process-log');
+    const timestamp = new Date().toLocaleTimeString();
+    const typeClass = type === 'error' ? 'text-danger' :
+                     type === 'warning' ? 'text-warning' :
+                     type === 'success' ? 'text-success' : 'text-info';
+
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${typeClass}`;
+    entry.textContent = `[${timestamp}] ${message}`;
+
+    log.appendChild(entry);
+    log.scrollTop = log.scrollHeight;
+
+    // Keep only last 100 entries
+    const entries = log.querySelectorAll('.log-entry');
+    if (entries.length > 100) {
+        entries[0].remove();
+    }
+}
+
+function clearLog() {
+    document.getElementById('process-log').innerHTML =
+        '<div class="log-entry text-info">[Ready] Log cleared</div>';
+}
+
+// Load custom timing on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const customTiming = localStorage.getItem('customTiming');
+    if (customTiming) {
+        const preset = JSON.parse(customTiming);
+        document.getElementById('drain-time').value = preset.drain;
+        document.getElementById('fill-time').value = preset.fill;
+        document.getElementById('mix-time').value = preset.mix;
+        document.getElementById('settle-time').value = preset.settle;
+    }
+});
+</script>
+{% endblock %}

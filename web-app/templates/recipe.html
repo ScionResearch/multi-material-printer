@@ -1,0 +1,472 @@
+{% extends "base.html" %}
+
+{% block title %}Recipe Builder - Scion Multi-Material Printer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-lg-8">
+        <!-- Recipe Builder Form -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Recipe Builder</h5>
+            </div>
+            <div class="card-body">
+                <form id="recipe-form">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="material-select" class="form-label">Material</label>
+                            <select class="form-select" id="material-select" required>
+                                <option value="">Select Material</option>
+                                <option value="A">Material A</option>
+                                <option value="B">Material B</option>
+                                <option value="C">Material C</option>
+                                <option value="D">Material D</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="layer-input" class="form-label">Layer Number</label>
+                            <input type="number" class="form-control" id="layer-input" min="1" max="10000" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">&nbsp;</label>
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="bi bi-plus"></i> Add
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Tips:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>Add material changes in ascending layer order</li>
+                        <li>Each material change will pause the printer automatically</li>
+                        <li>Material A, B, C, D correspond to your configured pump channels</li>
+                        <li>Layer numbers must be unique and greater than 0</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current Recipe Display -->
+        <div class="card">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-list-ol"></i> Current Recipe</h5>
+                <div>
+                    <button class="btn btn-sm btn-outline-light" onclick="clearRecipe()">
+                        <i class="bi bi-trash"></i> Clear All
+                    </button>
+                    <button class="btn btn-sm btn-light" onclick="saveRecipe()">
+                        <i class="bi bi-save"></i> Save Recipe
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="recipe-container">
+                    {% if recipe %}
+                        <div class="table-responsive">
+                            <table class="table table-hover" id="recipe-table">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Order</th>
+                                        <th>Layer</th>
+                                        <th>Material</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recipe-tbody">
+                                    {% for item in recipe %}
+                                    <tr data-layer="{{ item.layer }}" data-material="{{ item.material }}">
+                                        <td>{{ loop.index }}</td>
+                                        <td class="fw-bold">{{ item.layer }}</td>
+                                        <td>
+                                            <span class="badge bg-primary fs-6">Material {{ item.material }}</span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="removeRecipeItem('{{ item.layer }}')">
+                                                <i class="bi bi-trash"></i> Remove
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-list-ol" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3">No Recipe Items</h5>
+                            <p>Use the form above to add material changes to your recipe.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <!-- Recipe Summary -->
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0"><i class="bi bi-graph-up"></i> Recipe Summary</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <td><strong>Total Changes:</strong></td>
+                        <td><span id="total-changes">{{ recipe|length if recipe else 0 }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>First Change:</strong></td>
+                        <td><span id="first-change">{{ recipe[0].layer if recipe else 'None' }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Last Change:</strong></td>
+                        <td><span id="last-change">{{ recipe[-1].layer if recipe else 'None' }}</span></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Materials Used:</strong></td>
+                        <td><span id="materials-used">{{ recipe|map(attribute='material')|list|unique|join(', ') if recipe else 'None' }}</span></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recipe Preview -->
+        <div class="card mb-4">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="bi bi-eye"></i> Recipe Preview</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Recipe Format (for export)</label>
+                    <textarea class="form-control font-monospace" id="recipe-text" rows="4" readonly placeholder="Recipe will appear here in the format: A,50:B,120:C,200"></textarea>
+                </div>
+                <button class="btn btn-outline-secondary btn-sm" onclick="copyRecipeText()">
+                    <i class="bi bi-clipboard"></i> Copy to Clipboard
+                </button>
+            </div>
+        </div>
+
+        <!-- Import/Export -->
+        <div class="card mb-4">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="bi bi-arrow-repeat"></i> Import/Export</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label for="import-text" class="form-label">Import Recipe Text</label>
+                    <textarea class="form-control font-monospace" id="import-text" rows="3" placeholder="Paste recipe in format: A,50:B,120:C,200"></textarea>
+                </div>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-primary" onclick="importRecipe()">
+                        <i class="bi bi-upload"></i> Import Recipe
+                    </button>
+                    <button class="btn btn-outline-info" onclick="loadRecipeFromFile()">
+                        <i class="bi bi-folder-open"></i> Load from File
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+            <div class="card-header bg-light">
+                <h5 class="mb-0"><i class="bi bi-lightning"></i> Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-success" onclick="validateRecipe()">
+                        <i class="bi bi-check-circle"></i> Validate Recipe
+                    </button>
+                    <a href="{{ url_for('index') }}" class="btn btn-info">
+                        <i class="bi bi-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Recipe data management
+let currentRecipe = [];
+
+// Load existing recipe on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadCurrentRecipe();
+});
+
+function loadCurrentRecipe() {
+    fetch('/api/recipe')
+        .then(response => response.json())
+        .then(data => {
+            currentRecipe = data;
+            updateRecipeDisplay();
+        })
+        .catch(error => {
+            console.error('Error loading recipe:', error);
+            showAlert('Failed to load current recipe', 'warning');
+        });
+}
+
+// Form submission handler
+document.getElementById('recipe-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const material = document.getElementById('material-select').value;
+    const layer = parseInt(document.getElementById('layer-input').value);
+
+    if (!material || !layer) {
+        showAlert('Please select a material and enter a layer number', 'warning');
+        return;
+    }
+
+    // Check for duplicate layer
+    if (currentRecipe.some(item => item.layer === layer)) {
+        showAlert(`Layer ${layer} already exists in the recipe`, 'danger');
+        return;
+    }
+
+    // Add to recipe
+    currentRecipe.push({ material, layer });
+    currentRecipe.sort((a, b) => a.layer - b.layer);
+
+    // Clear form
+    document.getElementById('material-select').value = '';
+    document.getElementById('layer-input').value = '';
+
+    // Update display
+    updateRecipeDisplay();
+    showAlert(`Added Material ${material} at Layer ${layer}`, 'success');
+});
+
+function removeRecipeItem(layer) {
+    const layerNum = parseInt(layer);
+    currentRecipe = currentRecipe.filter(item => item.layer !== layerNum);
+    updateRecipeDisplay();
+    showAlert(`Removed material change at layer ${layerNum}`, 'info');
+}
+
+function clearRecipe() {
+    if (confirm('Are you sure you want to clear all recipe items?')) {
+        currentRecipe = [];
+        updateRecipeDisplay();
+        showAlert('Recipe cleared', 'warning');
+    }
+}
+
+function saveRecipe() {
+    if (currentRecipe.length === 0) {
+        showAlert('Cannot save empty recipe', 'warning');
+        return;
+    }
+
+    fetch('/api/recipe', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(currentRecipe)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Recipe saved successfully!', 'success');
+        } else {
+            showAlert('Failed to save recipe: ' + data.message, 'danger');
+        }
+    })
+    .catch(error => {
+        showAlert('Error saving recipe: ' + error, 'danger');
+    });
+}
+
+function updateRecipeDisplay() {
+    const container = document.getElementById('recipe-container');
+
+    if (currentRecipe.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-list-ol" style="font-size: 3rem;"></i>
+                <h5 class="mt-3">No Recipe Items</h5>
+                <p>Use the form above to add material changes to your recipe.</p>
+            </div>
+        `;
+    } else {
+        const tableHTML = `
+            <div class="table-responsive">
+                <table class="table table-hover" id="recipe-table">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Order</th>
+                            <th>Layer</th>
+                            <th>Material</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recipe-tbody">
+                        ${currentRecipe.map((item, index) => `
+                            <tr data-layer="${item.layer}" data-material="${item.material}">
+                                <td>${index + 1}</td>
+                                <td class="fw-bold">${item.layer}</td>
+                                <td>
+                                    <span class="badge bg-primary fs-6">Material ${item.material}</span>
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="removeRecipeItem('${item.layer}')">
+                                        <i class="bi bi-trash"></i> Remove
+                                    </button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        container.innerHTML = tableHTML;
+    }
+
+    updateRecipeSummary();
+    updateRecipePreview();
+}
+
+function updateRecipeSummary() {
+    const totalChanges = currentRecipe.length;
+    const firstChange = totalChanges > 0 ? currentRecipe[0].layer : 'None';
+    const lastChange = totalChanges > 0 ? currentRecipe[totalChanges - 1].layer : 'None';
+    const materialsUsed = [...new Set(currentRecipe.map(item => item.material))].join(', ') || 'None';
+
+    document.getElementById('total-changes').textContent = totalChanges;
+    document.getElementById('first-change').textContent = firstChange;
+    document.getElementById('last-change').textContent = lastChange;
+    document.getElementById('materials-used').textContent = materialsUsed;
+}
+
+function updateRecipePreview() {
+    const recipeText = currentRecipe.map(item => `${item.material},${item.layer}`).join(':');
+    document.getElementById('recipe-text').value = recipeText;
+}
+
+function copyRecipeText() {
+    const textArea = document.getElementById('recipe-text');
+    textArea.select();
+    document.execCommand('copy');
+    showAlert('Recipe text copied to clipboard', 'info');
+}
+
+function importRecipe() {
+    const importText = document.getElementById('import-text').value.trim();
+    if (!importText) {
+        showAlert('Please enter recipe text to import', 'warning');
+        return;
+    }
+
+    try {
+        const importedRecipe = [];
+        const entries = importText.split(':');
+
+        for (const entry of entries) {
+            if (entry.includes(',')) {
+                const [material, layer] = entry.split(',', 2);
+                const materialTrimmed = material.trim().toUpperCase();
+                const layerNum = parseInt(layer.trim());
+
+                if (!['A', 'B', 'C', 'D'].includes(materialTrimmed)) {
+                    throw new Error(`Invalid material: ${materialTrimmed}`);
+                }
+
+                if (isNaN(layerNum) || layerNum <= 0) {
+                    throw new Error(`Invalid layer: ${layer.trim()}`);
+                }
+
+                importedRecipe.push({ material: materialTrimmed, layer: layerNum });
+            }
+        }
+
+        if (importedRecipe.length === 0) {
+            throw new Error('No valid recipe entries found');
+        }
+
+        // Sort by layer
+        importedRecipe.sort((a, b) => a.layer - b.layer);
+
+        // Check for duplicate layers
+        const layers = importedRecipe.map(item => item.layer);
+        const uniqueLayers = [...new Set(layers)];
+        if (layers.length !== uniqueLayers.length) {
+            throw new Error('Duplicate layers found in recipe');
+        }
+
+        currentRecipe = importedRecipe;
+        updateRecipeDisplay();
+        document.getElementById('import-text').value = '';
+        showAlert(`Successfully imported ${importedRecipe.length} recipe items`, 'success');
+
+    } catch (error) {
+        showAlert('Import failed: ' + error.message, 'danger');
+    }
+}
+
+function validateRecipe() {
+    if (currentRecipe.length === 0) {
+        showAlert('Recipe is empty', 'warning');
+        return;
+    }
+
+    const errors = [];
+    const warnings = [];
+
+    // Check for gaps in layers
+    for (let i = 1; i < currentRecipe.length; i++) {
+        const gap = currentRecipe[i].layer - currentRecipe[i-1].layer;
+        if (gap === 1) {
+            warnings.push(`Very small gap between layers ${currentRecipe[i-1].layer} and ${currentRecipe[i].layer}`);
+        }
+    }
+
+    // Check if first change is too early
+    if (currentRecipe[0].layer < 10) {
+        warnings.push('First material change is very early (layer < 10)');
+    }
+
+    // Check for material sequence patterns
+    const materials = currentRecipe.map(item => item.material);
+    const uniqueMaterials = [...new Set(materials)];
+    if (uniqueMaterials.length === 1) {
+        warnings.push('Recipe uses only one material type');
+    }
+
+    if (errors.length === 0) {
+        let message = 'Recipe validation passed! ✓';
+        if (warnings.length > 0) {
+            message += '\n\nWarnings:\n• ' + warnings.join('\n• ');
+        }
+        showAlert(message, warnings.length > 0 ? 'warning' : 'success');
+    } else {
+        const message = 'Recipe validation failed:\n• ' + errors.join('\n• ');
+        showAlert(message, 'danger');
+    }
+}
+
+function loadRecipeFromFile() {
+    fetch('/api/recipe')
+        .then(response => response.json())
+        .then(data => {
+            if (data.length > 0) {
+                currentRecipe = data;
+                updateRecipeDisplay();
+                showAlert('Recipe loaded from file', 'success');
+            } else {
+                showAlert('No recipe found in file', 'info');
+            }
+        })
+        .catch(error => {
+            showAlert('Error loading recipe from file: ' + error, 'danger');
+        });
+}
+</script>
+{% endblock %}

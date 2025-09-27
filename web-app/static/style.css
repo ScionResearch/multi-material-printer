@@ -1,0 +1,280 @@
+/* Scion Multi-Material Printer Web Interface Styles */
+
+:root {
+    --scion-green: #93c897;
+    --scion-dark-green: #4e644f;
+    --scion-light-green: #e8f5ea;
+}
+
+/* Custom styling for Scion branding */
+.navbar-brand {
+    font-weight: bold;
+}
+
+.bg-success {
+    background-color: var(--scion-green) !important;
+}
+
+/* Progress bar animation */
+.progress-bar-animated {
+    animation: progress-bar-stripes 1s linear infinite;
+}
+
+/* Log styling */
+#activity-log {
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    background-color: #1a1a1a !important;
+}
+
+#activity-log .log-entry {
+    margin-bottom: 2px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Status indicators */
+.status-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-connected {
+    background-color: #28a745;
+    box-shadow: 0 0 5px rgba(40, 167, 69, 0.5);
+}
+
+.status-disconnected {
+    background-color: #dc3545;
+    box-shadow: 0 0 5px rgba(220, 53, 69, 0.5);
+}
+
+.status-warning {
+    background-color: #ffc107;
+    box-shadow: 0 0 5px rgba(255, 193, 7, 0.5);
+}
+
+/* Recipe table styling */
+#recipe-table {
+    font-size: 0.9rem;
+}
+
+#recipe-table .badge {
+    font-size: 0.8rem;
+}
+
+/* Card hover effects */
+.card {
+    transition: box-shadow 0.15s ease-in-out;
+}
+
+.card:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+/* Alert styling */
+.alert {
+    border: none;
+    border-radius: 8px;
+}
+
+/* Custom button styling */
+.btn {
+    border-radius: 6px;
+    font-weight: 500;
+}
+
+.btn-lg {
+    padding: 12px 24px;
+    font-size: 1.1rem;
+}
+
+/* Form styling */
+.form-control, .form-select {
+    border-radius: 6px;
+    border: 1px solid #ced4da;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: var(--scion-green);
+    box-shadow: 0 0 0 0.2rem rgba(147, 200, 151, 0.25);
+}
+
+/* Loading spinner */
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .container {
+        padding-left: 15px;
+        padding-right: 15px;
+    }
+
+    .card-body {
+        padding: 1rem;
+    }
+
+    .btn-lg {
+        padding: 10px 20px;
+        font-size: 1rem;
+    }
+
+    #activity-log {
+        height: 200px !important;
+        font-size: 0.8rem;
+    }
+
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .navbar-brand {
+        font-size: 1rem;
+    }
+
+    .card-title {
+        font-size: 1.1rem;
+    }
+
+    .btn {
+        font-size: 0.875rem;
+    }
+
+    .progress {
+        height: 20px !important;
+    }
+}
+
+/* Print styling */
+@media print {
+    .navbar, .card-header, .btn, footer {
+        display: none !important;
+    }
+
+    .card {
+        border: 1px solid #dee2e6 !important;
+        box-shadow: none !important;
+    }
+
+    .card-body {
+        padding: 0.5rem !important;
+    }
+}
+
+/* Dark theme support (for future implementation) */
+@media (prefers-color-scheme: dark) {
+    /* Dark theme styles would go here */
+}
+
+/* Custom animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+/* Connection status styling */
+#connection-status {
+    transition: all 0.3s ease;
+}
+
+#connection-status.connected {
+    background-color: #28a745 !important;
+}
+
+#connection-status.disconnected {
+    background-color: #dc3545 !important;
+}
+
+#connection-status.connecting {
+    background-color: #ffc107 !important;
+}
+
+/* Recipe visualization */
+.recipe-timeline {
+    position: relative;
+    padding: 20px 0;
+}
+
+.recipe-timeline::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: var(--scion-green);
+    transform: translateX(-50%);
+}
+
+.recipe-item {
+    position: relative;
+    margin: 20px 0;
+    padding: 15px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.recipe-item::before {
+    content: '';
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    width: 20px;
+    height: 20px;
+    background-color: var(--scion-green);
+    border-radius: 50%;
+    transform: translateY(-50%);
+}
+
+/* Tooltip styling */
+.tooltip {
+    font-size: 0.875rem;
+}
+
+.tooltip-inner {
+    max-width: 300px;
+    text-align: left;
+}
+
+/* Custom scrollbar for activity log */
+#activity-log::-webkit-scrollbar {
+    width: 8px;
+}
+
+#activity-log::-webkit-scrollbar-track {
+    background: #2a2a2a;
+}
+
+#activity-log::-webkit-scrollbar-thumb {
+    background: #555;
+    border-radius: 4px;
+}
+
+#activity-log::-webkit-scrollbar-thumb:hover {
+    background: #777;
+}
