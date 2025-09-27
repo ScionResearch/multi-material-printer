@@ -3,6 +3,46 @@
 {% block title %}Dashboard - Scion Multi-Material Printer{% endblock %}
 
 {% block content %}
+<!-- Quick Action Cards -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-center h-100 quick-action-card border-success">
+            <div class="card-body">
+                <i class="bi bi-play-circle-fill text-success" style="font-size: 3rem;"></i>
+                <h5 class="card-title mt-2">Start Print</h5>
+                <p class="card-text">Begin multi-material printing with current recipe</p>
+                <button class="btn btn-success btn-lg w-100" onclick="startMultiMaterial()" id="start-print-btn">
+                    <i class="bi bi-play"></i> Start Multi-Material
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center h-100 quick-action-card border-warning">
+            <div class="card-body">
+                <i class="bi bi-gear-fill text-warning" style="font-size: 3rem;"></i>
+                <h5 class="card-title mt-2">Test Pumps</h5>
+                <p class="card-text">Quick pump functionality test</p>
+                <button class="btn btn-warning btn-lg w-100" onclick="quickPumpTest()" id="test-pumps-btn">
+                    <i class="bi bi-gear"></i> Test Pumps
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center h-100 quick-action-card border-primary">
+            <div class="card-body">
+                <i class="bi bi-list-ul text-primary" style="font-size: 3rem;"></i>
+                <h5 class="card-title mt-2">Edit Recipe</h5>
+                <p class="card-text">Modify material change sequence</p>
+                <a href="{{ url_for('recipe_page') }}" class="btn btn-primary btn-lg w-100">
+                    <i class="bi bi-pencil"></i> Edit Recipe
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row">
     <!-- Status Overview -->
     <div class="col-lg-8">
@@ -131,26 +171,70 @@
             </div>
         </div>
 
+        <!-- Quick Action Cards -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card text-center h-100 quick-action-card border-success">
+                    <div class="card-body">
+                        <i class="bi bi-play-circle-fill text-success" style="font-size: 3rem;"></i>
+                        <h5 class="card-title mt-2">Start Print</h5>
+                        <p class="card-text small text-muted">Begin multi-material printing with current recipe</p>
+                        <button class="btn btn-success btn-lg w-100" onclick="startMultiMaterial()" id="start-print-btn">
+                            <i class="bi bi-play-fill"></i> Start Multi-Material
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center h-100 quick-action-card border-warning">
+                    <div class="card-body">
+                        <i class="bi bi-droplet-fill text-warning" style="font-size: 3rem;"></i>
+                        <h5 class="card-title mt-2">Test Pumps</h5>
+                        <p class="card-text small text-muted">Quick pump functionality test</p>
+                        <button class="btn btn-warning btn-lg w-100" onclick="quickPumpTest()">
+                            <i class="bi bi-gear-fill"></i> Test All Pumps
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center h-100 quick-action-card border-info">
+                    <div class="card-body">
+                        <i class="bi bi-list-check text-info" style="font-size: 3rem;"></i>
+                        <h5 class="card-title mt-2">Recipe</h5>
+                        <p class="card-text small text-muted">Create or modify material change sequence</p>
+                        <a href="{{ url_for('recipe_page') }}" class="btn btn-info btn-lg w-100">
+                            <i class="bi bi-pencil-fill"></i> Edit Recipe
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Current Recipe Display -->
         <div class="card mb-4">
-            <div class="card-header bg-secondary text-white">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-list-check"></i> Active Recipe</h5>
+                <span class="badge bg-light text-dark">{{ recipe|length if recipe else 0 }} changes</span>
             </div>
             <div class="card-body">
                 {% if recipe %}
                     <div class="table-responsive">
-                        <table class="table table-sm">
+                        <table class="table table-sm table-hover">
                             <thead>
                                 <tr>
+                                    <th>Order</th>
                                     <th>Layer</th>
                                     <th>Material</th>
                                     <th>Status</th>
+                                    <th>Est. Time</th>
                                 </tr>
                             </thead>
                             <tbody id="recipe-table">
                                 {% for item in recipe %}
                                 <tr data-layer="{{ item.layer }}">
-                                    <td>{{ item.layer }}</td>
+                                    <td><span class="badge bg-outline-secondary">{{ loop.index }}</span></td>
+                                    <td><strong>{{ item.layer }}</strong></td>
                                     <td>
                                         <span class="badge bg-primary">{{ item.material }}</span>
                                     </td>
@@ -163,15 +247,42 @@
                                             <span class="badge bg-light text-dark">Pending</span>
                                         {% endif %}
                                     </td>
+                                    <td class="text-muted">~70s</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
+                    <div class="mt-3 p-2 bg-light rounded">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <small class="text-muted">
+                                    <i class="bi bi-clock"></i>
+                                    Total time: ~{{ (recipe|length * 70) }}s
+                                </small>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">
+                                    <i class="bi bi-arrow-right"></i>
+                                    Next: Layer {{ recipe[0].layer if recipe else 'N/A' }}
+                                </small>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">
+                                    <i class="bi bi-droplet"></i>
+                                    Materials: {{ recipe|map(attribute='material')|list|unique|join(', ') if recipe else 'None' }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
                 {% else %}
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i>
-                        No recipe loaded. <a href="{{ url_for('recipe_page') }}" class="alert-link">Create a recipe</a> to begin multi-material printing.
+                    <div class="text-center py-4">
+                        <i class="bi bi-file-earmark-plus text-muted" style="font-size: 3rem;"></i>
+                        <h6 class="text-muted mt-3">No Recipe Loaded</h6>
+                        <p class="text-muted">Create a material change recipe to get started</p>
+                        <a href="{{ url_for('recipe_page') }}" class="btn btn-primary btn-lg">
+                            <i class="bi bi-plus-lg"></i> Create Recipe
+                        </a>
                     </div>
                 {% endif %}
             </div>

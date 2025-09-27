@@ -322,6 +322,107 @@ function enableDebugMode() {
     showAlert('Debug mode enabled - check console for detailed logs', 'info');
 }
 
+// Quick Action Functions
+function startMultiMaterial() {
+    if (confirm('Start multi-material printing with the current recipe?')) {
+        const btn = document.getElementById('start-print-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Starting...';
+        }
+
+        fetch('/api/start_multimaterial', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Multi-material printing started successfully!', 'success');
+            } else {
+                showAlert(`Failed to start: ${data.message}`, 'danger');
+            }
+        })
+        .catch(error => {
+            showAlert(`Error: ${error.message}`, 'danger');
+        })
+        .finally(() => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-play"></i> Start Multi-Material';
+            }
+        });
+    }
+}
+
+function quickPumpTest() {
+    if (confirm('Run a quick test of all pumps? This will run each pump briefly.')) {
+        const btn = document.getElementById('test-pumps-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Testing...';
+        }
+
+        fetch('/api/test_pumps', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Pump test completed successfully!', 'success');
+            } else {
+                showAlert(`Pump test failed: ${data.message}`, 'danger');
+            }
+        })
+        .catch(error => {
+            showAlert(`Error: ${error.message}`, 'danger');
+        })
+        .finally(() => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-gear"></i> Test Pumps';
+            }
+        });
+    }
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(event) {
+    // Ctrl+Enter: Start/Stop multi-material
+    if (event.ctrlKey && event.key === 'Enter') {
+        event.preventDefault();
+        const statusElement = document.getElementById('mm-status');
+        if (statusElement && statusElement.textContent.includes('Active')) {
+            stopMultiMaterial();
+        } else {
+            startMultiMaterial();
+        }
+    }
+
+    // Ctrl+T: Test pumps
+    if (event.ctrlKey && event.key === 't') {
+        event.preventDefault();
+        quickPumpTest();
+    }
+
+    // Escape: Emergency stop
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        if (confirm('Emergency stop - halt all operations?')) {
+            fetch('/api/emergency_stop', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    showAlert('Emergency stop activated!', 'warning');
+                });
+        }
+    }
+});
+
 // Error handling
 window.addEventListener('error', function(event) {
     console.error('Global error:', event.error);
@@ -477,8 +578,171 @@ window.ScionApp = {
     debugLog,
     enableDebugMode,
     formatTimestamp,
-    formatDuration
+    formatDuration,
+    updateGlobalStatus
 };
+
+// Dashboard Quick Actions
+async function startMultiMaterial() {
+    const button = document.getElementById('start-print-btn');
+    const originalText = button.innerHTML;
+
+    try {
+        // Confirmation dialog
+        if (!confirm('Start multi-material printing with the current recipe?')) {
+            return;
+        }
+
+        // Update button state
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting...';
+
+        const response = await fetch('/api/multi-material/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showAlert('Multi-material printing started successfully!', 'success');
+            button.innerHTML = '<i class="bi bi-check-circle-fill"></i> Started';
+            setTimeout(() => {
+                button.innerHTML = '<i class="bi bi-stop-fill"></i> Stop Multi-Material';
+                button.onclick = stopMultiMaterial;
+                button.className = 'btn btn-danger btn-lg w-100';
+                button.disabled = false;
+            }, 2000);
+        } else {
+            throw new Error(result.message || 'Failed to start multi-material printing');
+        }
+    } catch (error) {
+        console.error('Error starting multi-material printing:', error);
+        showAlert(`Error: ${error.message}`, 'danger');
+        button.disabled = false;
+        button.innerHTML = originalText;
+    }
+}
+
+async function stopMultiMaterial() {
+    const button = document.getElementById('start-print-btn');
+
+    try {
+        if (!confirm('Stop multi-material printing?')) {
+            return;
+        }
+
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Stopping...';
+
+        const response = await fetch('/api/multi-material/stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showAlert('Multi-material printing stopped', 'warning');
+            button.innerHTML = '<i class="bi bi-play-fill"></i> Start Multi-Material';
+            button.onclick = startMultiMaterial;
+            button.className = 'btn btn-success btn-lg w-100';
+            button.disabled = false;
+        } else {
+            throw new Error(result.message || 'Failed to stop printing');
+        }
+    } catch (error) {
+        console.error('Error stopping multi-material printing:', error);
+        showAlert(`Error: ${error.message}`, 'danger');
+        button.disabled = false;
+    }
+}
+
+async function quickPumpTest() {
+    try {
+        if (!confirm('Test all pumps? This will run each pump for 3 seconds.')) {
+            return;
+        }
+
+        showAlert('Starting pump test sequence...', 'info');
+
+        const pumps = ['A', 'B', 'C', 'D'];
+        for (const pump of pumps) {
+            showAlert(`Testing Pump ${pump}...`, 'info', 2000);
+
+            const response = await fetch('/api/pump', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    motor: pump,
+                    direction: 'F',
+                    duration: 3
+                })
+            });
+
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(`Pump ${pump} test failed: ${result.message}`);
+            }
+
+            // Wait a bit between pump tests
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+
+        showAlert('All pumps tested successfully!', 'success');
+    } catch (error) {
+        console.error('Error during pump test:', error);
+        showAlert(`Pump test error: ${error.message}`, 'danger');
+    }
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(event) {
+    // Ctrl/Cmd + Enter = Start/Stop print
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        const startBtn = document.getElementById('start-print-btn');
+        if (startBtn && !startBtn.disabled) {
+            startBtn.click();
+        }
+    }
+
+    // Ctrl/Cmd + T = Test pumps
+    if ((event.ctrlKey || event.metaKey) && event.key === 't') {
+        event.preventDefault();
+        quickPumpTest();
+    }
+
+    // Escape = Emergency stop
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        emergencyStop();
+    }
+});
+
+async function emergencyStop() {
+    try {
+        const response = await fetch('/api/emergency-stop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showAlert('EMERGENCY STOP ACTIVATED', 'danger');
+        }
+    } catch (error) {
+        console.error('Error during emergency stop:', error);
+    }
+}
+
+// Add tooltips to show keyboard shortcuts
+document.addEventListener('DOMContentLoaded', function() {
+    const startBtn = document.getElementById('start-print-btn');
+    if (startBtn) {
+        startBtn.title = 'Ctrl+Enter to start/stop';
+    }
+});
 
 // Initialize theme on load
 loadSavedTheme();
