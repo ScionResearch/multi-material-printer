@@ -767,6 +767,7 @@ def main():
                 try:
                     update = manager.get_status_update(timeout=1.0)
                     print(f"[{update.timestamp:.1f}] {update.tag}: {update.message}")
+                    sys.stdout.flush()  # Force immediate output for GUI
                 except queue.Empty:
                     pass
         except KeyboardInterrupt:
