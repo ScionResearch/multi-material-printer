@@ -253,12 +253,12 @@ void Dialog::on_startPr_clicked()
         statusTimer->stop();
     }
 
-    // Build command arguments for modernized print_manager.py
+    // Build command arguments for print_manager.py
     QStringList arguments;
     arguments << scriptPath;
     arguments << "--recipe" << recipePath;
     arguments << "--printer-ip" << printerIP;
-    arguments << "--debug";  // Enable debug logging for GUI visibility
+    // No debug flag - clean logging only
 
     logMessage("INIT", "Starting automated multi-material printing");
 

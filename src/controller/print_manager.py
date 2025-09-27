@@ -159,10 +159,14 @@ class PrintManager:
 
         # Monitoring configuration
         self.poll_interval = 5.0  # seconds between status polls
-        self.log_cycle_frequency = 10  # log every N cycles
-        self.progress_frequency = 20  # show progress every N cycles
+        self.log_cycle_frequency = 20  # log every N cycles (reduced frequency)
+        self.progress_frequency = 40  # show progress every N cycles (reduced frequency)
 
-        logger.info(f"PrintManager initialized - printer: {self.printer_ip}")
+        # Research logging setup
+        self._experiment_start_time = None
+        self._material_change_count = 0
+
+        logger.info(f"Multi-Material Printer Ready - IP: {self.printer_ip}")
 
     def _find_config_path(self) -> Path:
         """Find configuration file path."""
@@ -393,40 +397,26 @@ class PrintManager:
 
     def _monitoring_loop(self):
         """
-        Main monitoring loop running in background thread.
-
-        Polls printer status, detects layer changes, and triggers material swaps.
-        Communicates with main thread via status queue.
+        Main monitoring loop - research-focused logging only.
         """
         try:
             with self._state_lock:
                 self.state = PrintManagerState.MONITORING
+                self._experiment_start_time = time.time()
 
-            logger.info(f"Starting monitoring loop - printer: {self.printer_ip}")
-            self._send_status_update("MONITOR", f"Monitoring printer {self.printer_ip} every {self.poll_interval}s")
-
-            if self.recipe:
-                recipe_summary = dict(sorted(self.recipe.items()))
-                logger.info(f"Recipe loaded: {recipe_summary}")
-                self._send_status_update("MONITOR", f"Recipe loaded with {len(self.recipe)} changes", {"recipe": recipe_summary})
-            else:
-                logger.warning("No recipe loaded - monitoring only")
-                self._send_status_update("MONITOR", "No recipe loaded - monitoring only", level="warning")
+            # Clean startup message
+            self._send_status_update("EXPERIMENT", f"Multi-material experiment started",
+                                   {"recipe": dict(sorted(self.recipe.items())), "printer_ip": self.printer_ip})
 
             loop_count = 0
+            last_layer_logged = None
 
             while not self._stop_event.is_set():
                 loop_count += 1
 
-                # Periodic logging
-                if loop_count % self.log_cycle_frequency == 1:
-                    logger.debug(f"Monitor cycle #{loop_count} - {time.strftime('%H:%M:%S')}")
-
-                # Get printer status
+                # Get printer status (suppress debug output)
                 status = self._get_printer_status()
                 if not status:
-                    logger.warning("Lost connection to printer - retrying...")
-                    self._send_status_update("MONITOR", "Lost connection to printer", level="warning")
                     if not self._stop_event.wait(self.poll_interval):
                         continue
                     break
@@ -434,23 +424,25 @@ class PrintManager:
                 # Extract current layer
                 current_layer = self._extract_current_layer(status)
                 if current_layer is None:
-                    if loop_count % self.progress_frequency == 1:
-                        logger.debug("Could not determine current layer")
                     if not self._stop_event.wait(2.0):
                         continue
                     break
 
-                # Periodic layer reporting
-                if loop_count % (self.log_cycle_frequency // 2) == 1:
-                    logger.info(f"Current layer: {current_layer}")
-                    self._send_status_update("MONITOR", f"Current layer: {current_layer}", {"current_layer": current_layer})
+                # Only log layer progress when it changes
+                if current_layer != last_layer_logged:
+                    elapsed = time.time() - self._experiment_start_time
+                    self._send_status_update("PROGRESS", f"Layer {current_layer} reached",
+                                           {"current_layer": current_layer, "elapsed_minutes": round(elapsed/60, 1)})
+                    last_layer_logged = current_layer
 
                 # Check for material changes
                 if current_layer in self.recipe and current_layer != self._last_processed_layer:
                     material = self.recipe[current_layer]
-                    logger.info(f"Material change triggered: Layer {current_layer} → Material {material}")
-                    self._send_status_update("MATERIAL_CHANGE", f"Triggered: Layer {current_layer} → Material {material}",
-                                           {"layer": current_layer, "material": material})
+                    self._material_change_count += 1
+
+                    change_start = time.time()
+                    self._send_status_update("MATERIAL", f"Change #{self._material_change_count}: Layer {current_layer} → Material {material}",
+                                           {"layer": current_layer, "material": material, "change_number": self._material_change_count})
 
                     with self._state_lock:
                         self.state = PrintManagerState.MATERIAL_CHANGING
@@ -460,51 +452,36 @@ class PrintManager:
                         self._last_processed_layer = current_layer
                         del self.recipe[current_layer]
 
+                        change_duration = time.time() - change_start
                         remaining = len(self.recipe)
-                        logger.info(f"Material change completed. Remaining: {remaining}")
-                        self._send_status_update("MATERIAL_CHANGE", f"Completed. Remaining changes: {remaining}",
-                                               {"remaining": remaining})
 
-                        if self.recipe:
+                        self._send_status_update("MATERIAL", f"Change #{self._material_change_count} completed in {change_duration:.1f}s",
+                                               {"material": material, "duration_seconds": round(change_duration, 1), "remaining_changes": remaining})
+
+                        if remaining > 0:
                             next_layer = min(self.recipe.keys())
-                            logger.info(f"Next change at layer {next_layer}")
-                            self._send_status_update("MATERIAL_CHANGE", f"Next change at layer {next_layer}",
-                                                   {"next_layer": next_layer})
+                            self._send_status_update("MATERIAL", f"Next change: Layer {next_layer} (Material {self.recipe[next_layer]})",
+                                                   {"next_layer": next_layer, "next_material": self.recipe[next_layer]})
                     else:
-                        logger.error("Material change failed!")
-                        self._send_status_update("MATERIAL_CHANGE", "Material change failed!", level="error")
-                        # Mark as processed to prevent repeated attempts
+                        self._send_status_update("MATERIAL", f"Change #{self._material_change_count} FAILED", level="error")
                         self._last_processed_layer = current_layer
 
                     with self._state_lock:
                         self.state = PrintManagerState.MONITORING
 
-                else:
-                    # Show upcoming changes periodically
-                    if self.recipe and loop_count % self.progress_frequency == 1:
-                        upcoming = [layer for layer in self.recipe.keys() if layer > current_layer]
-                        if upcoming:
-                            next_change = min(upcoming)
-                            layers_until = next_change - current_layer
-                            logger.info(f"Next change in {layers_until} layers (layer {next_change})")
-                            self._send_status_update("MONITOR", f"Next change in {layers_until} layers",
-                                                   {"layers_until": layers_until, "next_layer": next_change})
-
                 # Check if print is complete
                 if self._is_print_complete(status):
-                    logger.info("PRINT COMPLETED!")
-                    self._send_status_update("MONITOR", "PRINT COMPLETED!", {"status": "complete"})
+                    total_time = time.time() - self._experiment_start_time
+                    self._send_status_update("EXPERIMENT", f"Experiment completed in {total_time/60:.1f} minutes",
+                                           {"total_changes": self._material_change_count, "duration_minutes": round(total_time/60, 1)})
                     break
 
                 # Wait for next cycle or stop signal
                 if self._stop_event.wait(self.poll_interval):
                     break
 
-            logger.info("Monitoring loop completed")
-
         except Exception as e:
-            logger.error(f"Critical error in monitoring loop: {e}", exc_info=True)
-            self._send_status_update("MONITOR", f"Critical error: {e}", level="error")
+            self._send_status_update("EXPERIMENT", f"Critical error: {e}", level="error")
             with self._state_lock:
                 self.state = PrintManagerState.ERROR
 
@@ -512,17 +489,14 @@ class PrintManager:
             with self._state_lock:
                 if self.state != PrintManagerState.ERROR:
                     self.state = PrintManagerState.IDLE
-            logger.info("Monitoring loop ended")
 
     def _get_printer_status(self):
         """Get current printer status via uart-wifi."""
         try:
             if printer_comms is None:
-                logger.error("printer_comms module not available")
                 return None
             return printer_comms.get_status(self.printer_ip)
         except Exception as e:
-            logger.debug(f"Error getting printer status: {e}")
             return None
 
     def _extract_current_layer(self, status) -> Optional[int]:
@@ -592,7 +566,6 @@ class PrintManager:
             return None
 
         except Exception as e:
-            logger.debug(f"Error extracting layer: {e}")
             return None
 
     def _handle_material_change(self, material: str) -> bool:
@@ -606,58 +579,46 @@ class PrintManager:
             True if successful
         """
         try:
-            logger.info(f"Starting material change to {material}...")
-            self._send_status_update("MATERIAL_CHANGE", f"Starting change to {material}", {"material": material})
+            self._send_status_update("MATERIAL", f"Starting material change to {material}")
 
             # Step 1: Pause printer
-            logger.info("Step 1: Pausing printer...")
-            self._send_status_update("MATERIAL_CHANGE", "Pausing printer...")
-
+            self._send_status_update("TIMING", "Step 1: Pausing printer...")
             if not self._pause_printer():
-                logger.error("Could not pause printer")
-                self._send_status_update("MATERIAL_CHANGE", "ERROR: Could not pause printer", level="error")
+                self._send_status_update("MATERIAL", "ERROR: Could not pause printer", level="error")
                 return False
 
             # Step 2: Wait for bed to rise
-            logger.info("Step 2: Waiting for bed to reach raised position...")
-            self._send_status_update("MATERIAL_CHANGE", "Waiting for bed positioning...")
+            self._send_status_update("TIMING", "Step 2: Waiting for bed to reach raised position...")
             self._wait_for_bed_raised()
 
             # Step 3: Execute material change
-            logger.info("Step 3: Starting pump sequence...")
-            self._send_status_update("MATERIAL_CHANGE", "Starting pump sequence...")
+            self._send_status_update("TIMING", "Step 3: Starting pump sequence...")
+            pump_start = time.time()
 
             if mmu_control is None:
-                logger.error("mmu_control module not available")
-                self._send_status_update("MATERIAL_CHANGE", "ERROR: MMU control not available", level="error")
+                self._send_status_update("MATERIAL", "ERROR: MMU control not available", level="error")
                 return False
 
             success = mmu_control.change_material(material)
+            pump_duration = time.time() - pump_start
 
             if success:
-                logger.info("✓ Pump sequence completed successfully")
-                self._send_status_update("MATERIAL_CHANGE", "✓ Pump sequence completed")
+                self._send_status_update("TIMING", f"✓ Pump sequence completed in {pump_duration:.1f}s")
             else:
-                logger.error("Pump sequence failed - NOT resuming printer")
-                self._send_status_update("MATERIAL_CHANGE", "ERROR: Pump sequence failed", level="error")
+                self._send_status_update("MATERIAL", "ERROR: Pump sequence failed", level="error")
                 return False
 
             # Step 4: Resume printer
-            logger.info("Step 4: Resuming printer...")
-            self._send_status_update("MATERIAL_CHANGE", "Resuming printer...")
-
+            self._send_status_update("TIMING", "Step 4: Resuming printer...")
             if self._resume_printer():
-                logger.info(f"✓ Material change to {material} completed successfully")
-                self._send_status_update("MATERIAL_CHANGE", f"✓ Material change to {material} completed")
+                self._send_status_update("MATERIAL", f"✓ Material change to {material} completed successfully")
                 return True
             else:
-                logger.error("Could not resume printer - manual intervention required")
-                self._send_status_update("MATERIAL_CHANGE", "ERROR: Could not resume printer", level="error")
+                self._send_status_update("MATERIAL", "ERROR: Could not resume printer", level="error")
                 return False
 
         except Exception as e:
-            logger.error(f"Material change failed: {e}", exc_info=True)
-            self._send_status_update("MATERIAL_CHANGE", f"ERROR: Material change failed: {e}", level="error")
+            self._send_status_update("MATERIAL", f"ERROR: Material change failed: {e}", level="error")
             return False
 
     def _pause_printer(self) -> bool:
@@ -684,48 +645,36 @@ class PrintManager:
         """
         Wait for bed to reach raised position after pause.
 
-        Implements robust wait with status verification and progress updates.
+        Critical timing for material changes - detailed logging for troubleshooting.
         """
-        logger.info("Waiting for bed to reach raised position...")
-        self._send_status_update("MATERIAL_CHANGE", "Bed positioning in progress...")
-
-        # Initial wait for pause command to take effect
+        self._send_status_update("TIMING", "Bed positioning: Initial 2s pause command delay...")
         time.sleep(2)
 
         # Extended wait for mechanical bed movement
         bed_raise_time = 15
-        logger.info(f"Allowing {bed_raise_time} seconds for bed movement...")
+        self._send_status_update("TIMING", f"Bed positioning: {bed_raise_time}s mechanical movement...")
 
         for i in range(bed_raise_time):
             if self._stop_event.wait(1.0):  # Respect stop signal
                 return
 
             if (i + 1) % 5 == 0:  # Progress update every 5 seconds
-                progress_msg = f"Bed positioning: {i + 1}/{bed_raise_time} seconds"
-                logger.info(progress_msg)
-                self._send_status_update("MATERIAL_CHANGE", progress_msg)
+                self._send_status_update("TIMING", f"Bed positioning: {i + 1}/{bed_raise_time}s elapsed")
 
         # Verify printer is still paused
-        try:
-            status = self._get_printer_status()
-            if status and hasattr(status, 'status'):
-                if status.status.lower() == 'pause':
-                    logger.info("✓ Bed should now be in raised position, printer still paused")
-                    self._send_status_update("MATERIAL_CHANGE", "✓ Bed positioned, printer paused")
-                else:
-                    logger.warning(f"Expected paused status but got: {status.status}")
-                    self._send_status_update("MATERIAL_CHANGE", f"WARNING: Unexpected status: {status.status}", level="warning")
+        status = self._get_printer_status()
+        if status and hasattr(status, 'status'):
+            if status.status.lower() == 'pause':
+                self._send_status_update("TIMING", "✓ Bed positioned, printer still paused")
             else:
-                logger.warning("Could not verify pause status")
-                self._send_status_update("MATERIAL_CHANGE", "WARNING: Could not verify pause status", level="warning")
-        except Exception as e:
-            logger.warning(f"Error checking pause status: {e}")
+                self._send_status_update("TIMING", f"WARNING: Expected pause, got {status.status}", level="warning")
+        else:
+            self._send_status_update("TIMING", "WARNING: Could not verify pause status", level="warning")
 
         # Additional safety buffer
-        logger.info("Adding safety buffer...")
+        self._send_status_update("TIMING", "Bed positioning: 3s safety buffer...")
         time.sleep(3)
-        logger.info("✓ Bed positioning complete - ready for material change")
-        self._send_status_update("MATERIAL_CHANGE", "✓ Ready for material change")
+        self._send_status_update("TIMING", "✓ Bed positioning complete - ready for material change")
 
     def _is_print_complete(self, status) -> bool:
         """Check if print is complete based on status."""
@@ -763,7 +712,6 @@ class PrintManager:
             return False
 
         except Exception as e:
-            logger.debug(f"Error checking print completion: {e}")
             return False
 
 
