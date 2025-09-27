@@ -84,13 +84,13 @@ def _import_controller_modules():
                 logger.info("✓ Path-adjusted imports successful")
                 return True
             except ImportError as e3:
-                logger.error("FATAL: All import methods failed!")
-                logger.error(f"  Relative import error: {e}")
-                logger.error(f"  Absolute import error: {e2}")
-                logger.error(f"  Path-adjusted import error: {e3}")
-                logger.error(f"  Current working directory: {os.getcwd()}")
-                logger.error(f"  Script directory: {Path(__file__).parent}")
-                logger.error(f"  Python path: {sys.path}")
+                print("FATAL: All import methods failed!")
+                print(f"  Relative import error: {e}")
+                print(f"  Absolute import error: {e2}")
+                print(f"  Path-adjusted import error: {e3}")
+                print(f"  Current working directory: {os.getcwd()}")
+                print(f"  Script directory: {Path(__file__).parent}")
+                print(f"  Python path: {sys.path}")
                 return False
 
 # Initialize imports
@@ -596,9 +596,13 @@ class PrintManager:
             pump_start = time.time()
 
             if mmu_control is None:
-                self._send_status_update("MATERIAL", "ERROR: MMU control not available", level="error")
+                self._send_status_update("MATERIAL", "ERROR: MMU control not available - imports failed", level="error")
+                # Log import status for debugging
+                self._send_status_update("MATERIAL", f"Current working directory: {os.getcwd()}", level="error")
+                self._send_status_update("MATERIAL", f"Python path: {sys.path}", level="error")
                 return False
 
+            self._send_status_update("TIMING", f"Starting MMU change_material({material})...")
             success = mmu_control.change_material(material)
             pump_duration = time.time() - pump_start
 
@@ -723,23 +727,19 @@ def main():
     """
     import sys
 
-    # Set up logging
+    # Configure clean logging for GUI integration
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-        datefmt='%H:%M:%S'
+        format='%(message)s',  # Clean format without timestamps/levels
+        stream=sys.stdout      # Send to stdout, not stderr
     )
 
     parser = argparse.ArgumentParser(description='Multi-Material Print Manager')
     parser.add_argument('--recipe', '-r', help='Path to recipe file')
     parser.add_argument('--config', '-c', help='Path to config file')
     parser.add_argument('--printer-ip', '-i', help='Printer IP address override')
-    parser.add_argument('--debug', '-d', action='store_true', help='Enable debug logging')
 
     args = parser.parse_args()
-
-    if args.debug:
-        logging.getLogger().setLevel(logging.DEBUG)
 
     try:
         # Create manager
