@@ -621,6 +621,94 @@ footer {
     }
 }
 
+/* Live Log Styling */
+.log-entry {
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    margin-bottom: 2px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.log-time {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+
+.log-level {
+    font-weight: 600;
+    margin-right: 4px;
+}
+
+.log-entry.log-debug {
+    background: rgba(108, 117, 125, 0.1);
+    color: var(--text-muted);
+}
+
+.log-entry.log-info {
+    background: rgba(255, 107, 53, 0.1);
+    color: var(--accent-orange);
+}
+
+.log-entry.log-warning {
+    background: rgba(255, 210, 63, 0.1);
+    color: var(--accent-yellow);
+}
+
+.log-entry.log-error {
+    background: rgba(255, 71, 87, 0.1);
+    color: var(--accent-red);
+    border-left: 3px solid var(--accent-red);
+}
+
+.log-entry.log-critical {
+    background: rgba(255, 71, 87, 0.2);
+    color: var(--accent-red);
+    border-left: 3px solid var(--accent-red);
+    font-weight: 600;
+}
+
+#live-log-preview {
+    background: var(--bg-primary) !important;
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius);
+    padding: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+    font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+    font-size: 0.8rem;
+}
+
+#live-log-preview::-webkit-scrollbar {
+    width: 6px;
+}
+
+#live-log-preview::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+#live-log-preview::-webkit-scrollbar-thumb {
+    background: var(--accent-orange);
+    border-radius: 3px;
+}
+
+/* Configuration page specific styles */
+.config-section {
+    margin-bottom: 2rem;
+}
+
+.config-card {
+    transition: var(--transition);
+}
+
+.config-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
 /* Print styling */
 @media print {
     .navbar, .card-header, .btn, footer {

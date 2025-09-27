@@ -35,6 +35,7 @@ function initializeSocket() {
 
     // Global event handlers
     socket.on('status_update', function(data) {
+        updateGlobalStatus(data);
         // This will be overridden by page-specific handlers
         console.log('Status update:', data);
     });
@@ -341,6 +342,126 @@ function logPerformance(label) {
     if (window.debugMode && performance.mark) {
         performance.mark(label);
     }
+}
+
+// Global status update handler
+function updateGlobalStatus(data) {
+    // Update timing information
+    if (data.operation_duration !== undefined) {
+        const durationElement = document.getElementById('operation-duration');
+        if (durationElement) {
+            durationElement.textContent = data.operation_duration.toFixed(1) + 's';
+        }
+    }
+
+    if (data.current_operation !== undefined) {
+        const operationElement = document.getElementById('operation-badge');
+        if (operationElement) {
+            operationElement.textContent = data.current_operation || 'idle';
+
+            // Update badge color based on operation
+            operationElement.className = 'badge';
+            if (data.current_operation === 'idle') {
+                operationElement.classList.add('bg-secondary');
+            } else if (data.current_operation.includes('error')) {
+                operationElement.classList.add('bg-danger');
+            } else if (data.current_operation.includes('completed')) {
+                operationElement.classList.add('bg-success');
+            } else {
+                operationElement.classList.add('bg-warning');
+            }
+        }
+    }
+
+    if (data.operation_start_time) {
+        const startElement = document.getElementById('operation-start');
+        if (startElement) {
+            startElement.textContent = formatTimestamp(data.operation_start_time);
+        }
+    }
+
+    // Update pump status indicators
+    if (data.pump_status) {
+        Object.entries(data.pump_status).forEach(([pumpId, status]) => {
+            const statusElement = document.getElementById(`${pumpId}-status`);
+            const indicatorElement = document.getElementById(`${pumpId}-indicator`);
+
+            if (statusElement) {
+                statusElement.textContent = status;
+
+                // Update status badge color
+                statusElement.className = 'badge';
+                if (status === 'idle') {
+                    statusElement.classList.add('bg-secondary');
+                } else if (status.includes('running')) {
+                    statusElement.classList.add('bg-warning');
+                } else if (status.includes('error')) {
+                    statusElement.classList.add('bg-danger');
+                } else {
+                    statusElement.classList.add('bg-info');
+                }
+            }
+
+            // Update pump indicator icon color
+            if (indicatorElement) {
+                const icon = indicatorElement.querySelector('i');
+                if (icon) {
+                    icon.className = 'bi fs-2';
+                    if (status === 'idle') {
+                        icon.classList.add('bi-droplet', 'text-muted');
+                    } else if (status.includes('running')) {
+                        icon.classList.add('bi-droplet-fill', 'text-warning');
+                    } else if (status.includes('error')) {
+                        icon.classList.add('bi-droplet-fill', 'text-danger');
+                    } else {
+                        icon.classList.add('bi-droplet-fill', 'text-info');
+                    }
+                }
+            }
+        });
+    }
+
+    // Update sequence progress
+    if (data.sequence_progress) {
+        const progressBar = document.getElementById('step-progress-bar');
+        const progressText = document.getElementById('step-progress-text');
+
+        if (progressBar && data.sequence_progress.total_steps > 0) {
+            const progress = (data.sequence_progress.current_step / data.sequence_progress.total_steps) * 100;
+            progressBar.style.width = `${progress}%`;
+        }
+
+        if (progressText) {
+            progressText.textContent = `${data.sequence_progress.current_step}/${data.sequence_progress.total_steps}`;
+        }
+    }
+
+    // Trigger live duration updates
+    startTimerUpdates(data.operation_start_time);
+}
+
+// Live timer updates
+let timerInterval = null;
+
+function startTimerUpdates(startTime) {
+    if (timerInterval) {
+        clearInterval(timerInterval);
+    }
+
+    if (!startTime || startTime === '--:--') {
+        return;
+    }
+
+    timerInterval = setInterval(() => {
+        const start = new Date(startTime);
+        const now = new Date();
+        const duration = (now - start) / 1000;
+
+        const durationElement = document.getElementById('operation-duration');
+        if (durationElement) {
+            durationElement.textContent = duration.toFixed(1) + 's';
+        }
+    }, 1000);
 }
 
 // Export functions for use in other scripts

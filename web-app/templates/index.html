@@ -56,6 +56,81 @@
             </div>
         </div>
 
+        <!-- Real-Time Operation Status -->
+        <div class="card mb-4">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0"><i class="bi bi-clock"></i> Current Operation & Timing</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <h6>Current Operation</h6>
+                        <p class="fs-5" id="current-operation">
+                            <span class="badge bg-primary" id="operation-badge">{{ status.current_operation or 'idle' }}</span>
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Operation Duration</h6>
+                        <p class="fs-4 fw-bold" id="operation-duration">{{ "%.1f"|format(status.operation_duration or 0) }}s</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Start Time</h6>
+                        <p id="operation-start">{{ status.operation_start_time or '--:--' }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Step Progress</h6>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar" role="progressbar" id="step-progress-bar" style="width: 0%">
+                                <span id="step-progress-text">0/0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pump Status Grid -->
+                <hr>
+                <h6><i class="bi bi-droplet"></i> Pump Status</h6>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="pump-a-indicator">
+                                <i class="bi bi-droplet-fill fs-2"></i>
+                                <div class="small">Pump A</div>
+                                <span class="badge bg-secondary" id="pump-a-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="pump-b-indicator">
+                                <i class="bi bi-droplet-fill fs-2"></i>
+                                <div class="small">Pump B</div>
+                                <span class="badge bg-secondary" id="pump-b-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="pump-c-indicator">
+                                <i class="bi bi-droplet-fill fs-2"></i>
+                                <div class="small">Pump C</div>
+                                <span class="badge bg-secondary" id="pump-c-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="drain-pump-indicator">
+                                <i class="bi bi-funnel-fill fs-2"></i>
+                                <div class="small">Drain</div>
+                                <span class="badge bg-secondary" id="drain-pump-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Current Recipe Display -->
         <div class="card mb-4">
             <div class="card-header bg-secondary text-white">

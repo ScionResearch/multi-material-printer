@@ -56,11 +56,45 @@ current_status = {
     'next_material': 'None',
     'next_change_layer': 0,
     'mm_active': False,
-    'last_update': datetime.now().isoformat()
+    'last_update': datetime.now().isoformat(),
+    # Enhanced timing and progress tracking
+    'current_operation': 'idle',
+    'operation_start_time': None,
+    'operation_duration': 0,
+    'estimated_completion': None,
+    'pump_status': {
+        'pump_a': 'idle',
+        'pump_b': 'idle',
+        'pump_c': 'idle',
+        'drain_pump': 'idle'
+    },
+    'sequence_progress': {
+        'current_step': 0,
+        'total_steps': 0,
+        'step_name': '',
+        'step_progress': 0
+    }
 }
 
 status_monitor_thread = None
 status_monitor_running = False
+
+# Simple process tracking
+active_processes = {}
+import atexit
+
+def cleanup_processes():
+    """Clean up any running processes on shutdown"""
+    for name, process in active_processes.items():
+        if process and process.poll() is None:
+            print(f"Terminating {name} process...")
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+
+atexit.register(cleanup_processes)
 
 def get_config_path():
     """Get the configuration directory path"""
@@ -82,6 +116,100 @@ def load_recipe():
         except Exception as e:
             print(f"Error loading recipe: {e}")
     return []
+
+def load_pump_config():
+    """Load pump configuration from JSON file"""
+    config_file = get_config_path() / 'pump_profiles.json'
+    if config_file.exists():
+        try:
+            with open(config_file, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading pump config: {e}")
+    return get_default_pump_config()
+
+def load_network_config():
+    """Load network configuration from INI file"""
+    config_file = get_config_path() / 'network_settings.ini'
+    config = {
+        'printer_ip': '192.168.4.3',
+        'printer_port': 8080,
+        'wifi_ssid': '',
+        'connection_timeout': 10
+    }
+
+    if config_file.exists():
+        try:
+            import configparser
+            parser = configparser.ConfigParser()
+            parser.read(config_file)
+
+            if 'printer' in parser:
+                config['printer_ip'] = parser.get('printer', 'ip_address', fallback=config['printer_ip'])
+                config['printer_port'] = parser.getint('printer', 'port', fallback=config['printer_port'])
+                config['connection_timeout'] = parser.getint('printer', 'timeout', fallback=config['connection_timeout'])
+
+            if 'network' in parser:
+                config['wifi_ssid'] = parser.get('network', 'ssid', fallback=config['wifi_ssid'])
+        except Exception as e:
+            print(f"Error loading network config: {e}")
+
+    return config
+
+def get_default_pump_config():
+    """Get default pump configuration"""
+    return {
+        "pumps": {
+            "pump_a": {
+                "name": "Pump A",
+                "description": "Primary material pump",
+                "gpio_pin": 18,
+                "flow_rate_ml_per_second": 2.5,
+                "max_volume_ml": 500,
+                "calibration": {"steps_per_ml": 100, "last_calibrated": None}
+            },
+            "pump_b": {
+                "name": "Pump B",
+                "description": "Secondary material pump",
+                "gpio_pin": 19,
+                "flow_rate_ml_per_second": 2.5,
+                "max_volume_ml": 500,
+                "calibration": {"steps_per_ml": 100, "last_calibrated": None}
+            },
+            "pump_c": {
+                "name": "Pump C",
+                "description": "Third material pump",
+                "gpio_pin": 21,
+                "flow_rate_ml_per_second": 2.5,
+                "max_volume_ml": 500,
+                "calibration": {"steps_per_ml": 100, "last_calibrated": None}
+            },
+            "drain_pump": {
+                "name": "Drain Pump",
+                "description": "Vat drainage pump",
+                "gpio_pin": 20,
+                "flow_rate_ml_per_second": 5.0,
+                "max_volume_ml": 1000,
+                "calibration": {"steps_per_ml": 80, "last_calibrated": None}
+            }
+        },
+        "material_change": {
+            "drain_volume_ml": 50,
+            "fill_volume_ml": 45,
+            "mixing_time_seconds": 10,
+            "settle_time_seconds": 5
+        },
+        "safety": {
+            "max_pump_runtime_seconds": 300,
+            "emergency_stop_enabled": True,
+            "sensor_check_interval_seconds": 1
+        },
+        "maintenance": {
+            "pump_cycle_count": {"pump_a": 0, "pump_b": 0, "pump_c": 0, "drain_pump": 0},
+            "last_maintenance_date": None,
+            "maintenance_interval_cycles": 1000
+        }
+    }
 
 def parse_recipe(recipe_text):
     """Parse recipe text format (A,50:B,120:C,200) into structured data"""
@@ -221,6 +349,15 @@ def manual_page():
     """Manual controls page"""
     return render_template('manual.html', status=current_status)
 
+@app.route('/config')
+def config_page():
+    """Configuration management page"""
+    pump_config = load_pump_config()
+    network_config = load_network_config()
+    return render_template('config.html',
+                         pump_config=pump_config,
+                         network_config=network_config)
+
 @app.route('/api/recipe', methods=['POST'])
 def api_save_recipe():
     """API endpoint to save recipe"""
@@ -286,10 +423,28 @@ def api_pump_control():
         if duration <= 0 or duration > 300:  # Max 5 minutes
             return jsonify({'success': False, 'message': 'Invalid duration (1-300 seconds)'}), 400
 
+        # Update pump status
+        pump_map = {'A': 'pump_a', 'B': 'pump_b', 'C': 'pump_c', 'D': 'drain_pump'}
+        pump_name = pump_map.get(motor, f'pump_{motor.lower()}')
+
+        current_status['pump_status'][pump_name] = f'running_{direction.lower()}'
+        current_status['current_operation'] = f'manual_pump_{pump_name}'
+        current_status['operation_start_time'] = datetime.now().isoformat()
+        socketio.emit('status_update', current_status)
+
         # Execute pump command using existing photonmmu_pump module
         result = photonmmu_pump.run_stepper(motor, direction, duration)
 
-        return jsonify({'success': True, 'message': f'Pump {motor} running {direction} for {duration}s'})
+        # Reset pump status
+        current_status['pump_status'][pump_name] = 'idle'
+        current_status['current_operation'] = 'idle'
+        if current_status['operation_start_time']:
+            start_time = datetime.fromisoformat(current_status['operation_start_time'])
+            current_status['operation_duration'] = (datetime.now() - start_time).total_seconds()
+
+        socketio.emit('status_update', current_status)
+
+        return jsonify({'success': True, 'message': f'Pump {motor} completed {direction} for {duration}s'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
@@ -346,6 +501,278 @@ def api_emergency_stop():
         return jsonify({'success': True, 'message': 'Emergency stop activated'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/config/pump', methods=['GET'])
+def api_get_pump_config():
+    """API endpoint to get pump configuration"""
+    try:
+        config = load_pump_config()
+        return jsonify(config)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/config/pump', methods=['POST'])
+def api_save_pump_config():
+    """API endpoint to save pump configuration"""
+    try:
+        config_data = request.json
+        config_file = get_config_path() / 'pump_profiles.json'
+
+        # Validate configuration structure
+        if not validate_pump_config(config_data):
+            return jsonify({'success': False, 'message': 'Invalid pump configuration format'}), 400
+
+        # Create backup
+        backup_file = get_config_path() / f'pump_profiles_backup_{int(time.time())}.json'
+        if config_file.exists():
+            import shutil
+            shutil.copy2(config_file, backup_file)
+
+        # Save new configuration
+        with open(config_file, 'w') as f:
+            json.dump(config_data, f, indent=2)
+
+        socketio.emit('system_alert', {
+            'message': 'Pump configuration saved successfully',
+            'type': 'success'
+        })
+
+        return jsonify({'success': True, 'message': 'Pump configuration saved successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/config/network', methods=['GET'])
+def api_get_network_config():
+    """API endpoint to get network configuration"""
+    try:
+        config = load_network_config()
+        return jsonify(config)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/config/network', methods=['POST'])
+def api_save_network_config():
+    """API endpoint to save network configuration"""
+    try:
+        config_data = request.json
+        config_file = get_config_path() / 'network_settings.ini'
+
+        # Create backup
+        backup_file = get_config_path() / f'network_settings_backup_{int(time.time())}.ini'
+        if config_file.exists():
+            import shutil
+            shutil.copy2(config_file, backup_file)
+
+        # Create INI configuration
+        import configparser
+        parser = configparser.ConfigParser()
+
+        parser['printer'] = {
+            'ip_address': config_data.get('printer_ip', '192.168.4.3'),
+            'port': str(config_data.get('printer_port', 8080)),
+            'timeout': str(config_data.get('connection_timeout', 10))
+        }
+
+        parser['network'] = {
+            'ssid': config_data.get('wifi_ssid', '')
+        }
+
+        # Save configuration
+        with open(config_file, 'w') as f:
+            parser.write(f)
+
+        socketio.emit('system_alert', {
+            'message': 'Network configuration saved successfully',
+            'type': 'success'
+        })
+
+        return jsonify({'success': True, 'message': 'Network configuration saved successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/config/test-connection', methods=['POST'])
+def api_test_connection():
+    """API endpoint to test printer connection"""
+    try:
+        if not CONTROLLERS_AVAILABLE:
+            return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
+
+        # Get printer IP from request or config
+        printer_ip = request.json.get('printer_ip') if request.json else None
+        if not printer_ip:
+            network_config = load_network_config()
+            printer_ip = network_config['printer_ip']
+
+        # Test connection using printer_comms module
+        result = printer_comms.test_connection(printer_ip)
+
+        return jsonify({
+            'success': result,
+            'message': 'Connection successful' if result else 'Connection failed',
+            'ip': printer_ip
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/logging/config', methods=['GET'])
+def api_get_logging_config():
+    """API endpoint to get logging configuration"""
+    try:
+        # Try to get config from logging_config module
+        if 'logging_config' in sys.modules:
+            config = sys.modules['logging_config'].get_logging_config()
+            return jsonify(config)
+        else:
+            # Return default config
+            return jsonify({
+                'levels': {
+                    'print_manager': 'INFO',
+                    'mmu_control': 'INFO',
+                    'pump_control': 'INFO',
+                    'printer_comms': 'INFO',
+                    'web_interface': 'INFO'
+                },
+                'outputs': {
+                    'console': True,
+                    'file': False,
+                    'web_stream': True
+                }
+            })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/logging/config', methods=['POST'])
+def api_save_logging_config():
+    """API endpoint to save logging configuration"""
+    try:
+        config_data = request.json
+
+        # Try to update logging configuration
+        if 'logging_config' in sys.modules:
+            sys.modules['logging_config'].configure_logging(config_data)
+
+        # Also store in session for immediate use
+        socketio.emit('system_alert', {
+            'message': 'Logging configuration updated',
+            'type': 'success'
+        })
+
+        return jsonify({'success': True, 'message': 'Logging configuration saved'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/logging/recent', methods=['GET'])
+def api_get_recent_logs():
+    """API endpoint to get recent log entries"""
+    try:
+        count = request.args.get('count', 100, type=int)
+
+        if 'logging_config' in sys.modules:
+            logs = sys.modules['logging_config'].get_recent_logs(count)
+            return jsonify(logs)
+        else:
+            # Return sample logs if logging module not available
+            return jsonify([
+                {
+                    'timestamp': datetime.now().isoformat(),
+                    'level': 'INFO',
+                    'logger': 'web_interface',
+                    'message': 'Web interface initialized'
+                }
+            ])
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/logging/level', methods=['POST'])
+def api_set_log_level():
+    """API endpoint to change log level for a component"""
+    try:
+        data = request.json
+        component = data.get('component')
+        level = data.get('level')
+
+        if not component or not level:
+            return jsonify({'success': False, 'message': 'Component and level required'}), 400
+
+        if 'logging_config' in sys.modules:
+            sys.modules['logging_config'].set_log_level(component, level)
+
+        socketio.emit('log_message', {
+            'level': 'info',
+            'message': f'Log level for {component} changed to {level}',
+            'timestamp': datetime.now().isoformat()
+        })
+
+        return jsonify({'success': True, 'message': f'Log level updated for {component}'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+def validate_pump_config(config):
+    """Validate pump configuration structure"""
+    try:
+        required_keys = ['pumps', 'material_change', 'safety', 'maintenance']
+        if not all(key in config for key in required_keys):
+            return False
+
+        # Validate pump entries
+        for pump_id, pump_data in config['pumps'].items():
+            required_pump_keys = ['name', 'description', 'gpio_pin', 'flow_rate_ml_per_second', 'max_volume_ml', 'calibration']
+            if not all(key in pump_data for key in required_pump_keys):
+                return False
+
+            # Validate data types
+            if not isinstance(pump_data['gpio_pin'], int):
+                return False
+            if not isinstance(pump_data['flow_rate_ml_per_second'], (int, float)):
+                return False
+            if not isinstance(pump_data['max_volume_ml'], (int, float)):
+                return False
+
+        return True
+    except Exception:
+        return False
+
+def setup_logging_integration():
+    """Setup integration with controller logging system"""
+    try:
+        # Import logging configuration module
+        sys.path.append(str(Path(__file__).parent.parent / 'src' / 'controller'))
+        import logging_config
+
+        # Set up web callback for real-time log streaming AND console mirroring
+        def web_log_callback(level, message):
+            # Print to console with color coding
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            level_colors = {
+                'debug': '\033[36m',    # Cyan
+                'info': '\033[32m',     # Green
+                'warning': '\033[33m',  # Yellow
+                'error': '\033[31m',    # Red
+                'critical': '\033[35m'  # Magenta
+            }
+            reset = '\033[0m'
+            color = level_colors.get(level.lower(), '')
+
+            # Print to console
+            print(f"{color}[{timestamp}] {level.upper()}: {message}{reset}")
+
+            # Emit to web interface
+            socketio.emit('log_message', {
+                'level': level,
+                'message': message,
+                'timestamp': datetime.now().isoformat()
+            })
+
+        logging_config.set_web_callback(web_log_callback)
+
+        # Also setup a logger for the web interface itself
+        web_logger = logging_config.setup_logging('web_interface', level='INFO')
+        web_logger.info("Web interface logging initialized")
+
+        return True
+    except Exception as e:
+        print(f"Could not setup logging integration: {e}")
+        return False
 
 @socketio.on('connect')
 def handle_connect():
@@ -406,6 +833,14 @@ def run_print_manager(recipe_path):
             cwd=str(controller_dir)
         )
 
+        # Track the process
+        active_processes['print_manager'] = process
+
+        # Update status with timing
+        current_status['current_operation'] = 'multi_material_printing'
+        current_status['operation_start_time'] = datetime.now().isoformat()
+        socketio.emit('status_update', current_status)
+
         # Monitor output and emit via WebSocket
         while True:
             output = process.stdout.readline()
@@ -417,15 +852,27 @@ def run_print_manager(recipe_path):
 
         # Check if process completed successfully
         return_code = process.poll()
+
+        # Calculate operation duration
+        if current_status['operation_start_time']:
+            start_time = datetime.fromisoformat(current_status['operation_start_time'])
+            duration = (datetime.now() - start_time).total_seconds()
+            current_status['operation_duration'] = duration
+
+        # Clean up process tracking
+        active_processes.pop('print_manager', None)
+
         if return_code == 0:
+            current_status['current_operation'] = 'completed'
             socketio.emit('system_alert', {
-                'message': 'Multi-material printing completed successfully',
+                'message': f'Multi-material printing completed successfully in {duration:.1f}s',
                 'type': 'success'
             })
         else:
+            current_status['current_operation'] = 'error'
             error_output = process.stderr.read()
             socketio.emit('system_alert', {
-                'message': f'Print manager failed: {error_output}',
+                'message': f'Print manager failed after {duration:.1f}s: {error_output}',
                 'type': 'danger'
             })
 
@@ -447,6 +894,10 @@ if __name__ == '__main__':
     print(f"Controllers available: {CONTROLLERS_AVAILABLE}")
     print(f"Config path: {get_config_path()}")
     print(f"Recipe path: {get_recipe_path()}")
+
+    # Setup logging integration
+    logging_available = setup_logging_integration()
+    print(f"Logging integration: {'enabled' if logging_available else 'disabled'}")
 
     # Start background monitoring
     start_status_monitor()
