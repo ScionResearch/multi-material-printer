@@ -41,6 +41,15 @@ except ImportError as e:
     print("Make sure you're running from the Raspberry Pi with the controller modules installed")
     CONTROLLERS_AVAILABLE = False
 
+# Import shared status system
+try:
+    from shared_status import get_shared_status
+    shared_status = get_shared_status()
+    print("Shared status system initialized")
+except ImportError as e:
+    print(f"Warning: Could not import shared_status: {e}")
+    shared_status = None
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'scion-mmu-controller-secret-key'
 socketio = SocketIO(app, cors_allowed_origins="*")
@@ -293,36 +302,63 @@ def parse_printer_status(status_text):
     return status
 
 def status_monitor():
-    """Background thread to monitor printer status"""
+    """Background thread to monitor printer status from shared files"""
     global status_monitor_running, current_status
 
     while status_monitor_running:
         try:
-            # Get printer status
-            printer_status = get_printer_status()
-            if printer_status:
-                current_status.update({
-                    'printer_connected': printer_status['connected'],
-                    'printer_status': printer_status['state'],
-                    'current_layer': printer_status['layer'],
-                    'progress_percent': printer_status['progress'],
-                    'last_update': datetime.now().isoformat()
-                })
+            if shared_status:
+                # Read all status from shared files
+                all_status = shared_status.get_all_status()
 
-                # Check recipe for next material change
-                recipe = load_recipe()
-                if recipe:
-                    for item in recipe:
-                        if item['layer'] > current_status['current_layer']:
-                            current_status['next_material'] = item['material']
-                            current_status['next_change_layer'] = item['layer']
-                            break
-                    else:
-                        current_status['next_material'] = 'None'
-                        current_status['next_change_layer'] = 0
+                # Update current_status with shared file data
+                printer_status = all_status.get('printer', {})
+                pump_status = all_status.get('pumps', {})
+                recipe_status = all_status.get('recipe', {})
+
+                current_status.update({
+                    'printer_connected': printer_status.get('printer_connected', False),
+                    'printer_status': printer_status.get('printer_status', 'Unknown'),
+                    'current_layer': printer_status.get('current_layer', 0),
+                    'total_layers': printer_status.get('total_layers', 0),
+                    'progress_percent': printer_status.get('progress_percent', 0.0),
+                    'current_material': recipe_status.get('current_material', 'None'),
+                    'next_material': recipe_status.get('next_material', 'None'),
+                    'next_change_layer': recipe_status.get('next_change_layer', 0),
+                    'mm_active': recipe_status.get('recipe_active', False),
+                    'last_update': all_status.get('last_update', datetime.now().isoformat()),
+                    'current_operation': pump_status.get('current_operation', 'idle'),
+                    'operation_start_time': recipe_status.get('operation_start_time'),
+                    'operation_duration': recipe_status.get('operation_duration', 0),
+                    'estimated_completion': recipe_status.get('estimated_completion'),
+                    'pump_status': {
+                        'pump_a': pump_status.get('pump_a', {}).get('status', 'idle'),
+                        'pump_b': pump_status.get('pump_b', {}).get('status', 'idle'),
+                        'pump_c': pump_status.get('pump_c', {}).get('status', 'idle'),
+                        'drain_pump': pump_status.get('drain_pump', {}).get('status', 'idle')
+                    },
+                    'sequence_progress': {
+                        'current_step': recipe_status.get('current_step', 0),
+                        'total_steps': recipe_status.get('total_steps', 0),
+                        'step_name': pump_status.get('operation_step', ''),
+                        'step_progress': pump_status.get('step_progress', 0)
+                    }
+                })
 
                 # Emit status update to connected clients
                 socketio.emit('status_update', current_status)
+            else:
+                # Fallback to old method if shared status not available
+                printer_status = get_printer_status()
+                if printer_status:
+                    current_status.update({
+                        'printer_connected': printer_status['connected'],
+                        'printer_status': printer_status['state'],
+                        'current_layer': printer_status['layer'],
+                        'progress_percent': printer_status['progress'],
+                        'last_update': datetime.now().isoformat()
+                    })
+                    socketio.emit('status_update', current_status)
 
             time.sleep(2)  # Update every 2 seconds
 
@@ -423,55 +459,69 @@ def api_pump_control():
         if duration <= 0 or duration > 300:  # Max 5 minutes
             return jsonify({'success': False, 'message': 'Invalid duration (1-300 seconds)'}), 400
 
-        # Update pump status
-        pump_map = {'A': 'pump_a', 'B': 'pump_b', 'C': 'pump_c', 'D': 'drain_pump'}
-        pump_name = pump_map.get(motor, f'pump_{motor.lower()}')
+        # Use shared command system for pump control
+        if shared_status:
+            command_id = shared_status.add_command('pump_control', {
+                'motor': motor,
+                'direction': direction,
+                'duration': duration
+            })
+            shared_status.log_activity('INFO', f'Manual pump control requested: {motor} {direction} {duration}s (command {command_id})', 'web_app')
 
-        current_status['pump_status'][pump_name] = f'running_{direction.lower()}'
-        current_status['current_operation'] = f'manual_pump_{pump_name}'
-        current_status['operation_start_time'] = datetime.now().isoformat()
-        socketio.emit('status_update', current_status)
+            return jsonify({
+                'success': True,
+                'message': f'Pump {motor} command sent ({direction} for {duration}s)',
+                'command_id': command_id
+            })
+        else:
+            # Fallback to direct control if shared status not available
+            pump_map = {'A': 'pump_a', 'B': 'pump_b', 'C': 'pump_c', 'D': 'drain_pump'}
+            pump_name = pump_map.get(motor, f'pump_{motor.lower()}')
 
-        # Execute pump command using existing photonmmu_pump module
-        result = photonmmu_pump.run_stepper(motor, direction, duration)
+            current_status['pump_status'][pump_name] = f'running_{direction.lower()}'
+            current_status['current_operation'] = f'manual_pump_{pump_name}'
+            current_status['operation_start_time'] = datetime.now().isoformat()
+            socketio.emit('status_update', current_status)
 
-        # Reset pump status
-        current_status['pump_status'][pump_name] = 'idle'
-        current_status['current_operation'] = 'idle'
-        if current_status['operation_start_time']:
-            start_time = datetime.fromisoformat(current_status['operation_start_time'])
-            current_status['operation_duration'] = (datetime.now() - start_time).total_seconds()
+            # Execute pump command using existing photonmmu_pump module
+            result = photonmmu_pump.run_stepper(motor, direction, duration)
 
-        socketio.emit('status_update', current_status)
+            # Reset pump status
+            current_status['pump_status'][pump_name] = 'idle'
+            current_status['current_operation'] = 'idle'
+            if current_status['operation_start_time']:
+                start_time = datetime.fromisoformat(current_status['operation_start_time'])
+                current_status['operation_duration'] = (datetime.now() - start_time).total_seconds()
 
-        return jsonify({'success': True, 'message': f'Pump {motor} completed {direction} for {duration}s'})
+            socketio.emit('status_update', current_status)
+
+            return jsonify({'success': True, 'message': f'Pump {motor} completed {direction} for {duration}s'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/multi-material/start', methods=['POST'])
 def api_start_multi_material():
     """API endpoint to start multi-material printing"""
-    if not CONTROLLERS_AVAILABLE:
-        return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
-
     try:
-        # This would start the print_manager.py process in the background
         recipe_path = get_recipe_path()
         if not recipe_path.exists():
             return jsonify({'success': False, 'message': 'No recipe file found'}), 400
 
-        # Start print manager in background thread
-        print_manager_thread = threading.Thread(
-            target=run_print_manager,
-            args=(str(recipe_path),),
-            daemon=True
-        )
-        print_manager_thread.start()
+        # Use shared command system to request multi-material start
+        if shared_status:
+            command_id = shared_status.add_command('start_multi_material', {
+                'recipe_path': str(recipe_path)
+            })
+            shared_status.log_activity('INFO', f'Multi-material start requested via web app (command {command_id})', 'web_app')
 
-        current_status['mm_active'] = True
-        socketio.emit('status_update', current_status)
+            return jsonify({
+                'success': True,
+                'message': 'Multi-material printing start requested',
+                'command_id': command_id
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Shared status system not available'}), 503
 
-        return jsonify({'success': True, 'message': 'Multi-material printing started'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
@@ -479,11 +529,19 @@ def api_start_multi_material():
 def api_stop_multi_material():
     """API endpoint to stop multi-material printing"""
     try:
-        # This would stop the print_manager.py process
-        current_status['mm_active'] = False
-        socketio.emit('status_update', current_status)
+        # Use shared command system to request multi-material stop
+        if shared_status:
+            command_id = shared_status.add_command('stop_multi_material', {})
+            shared_status.log_activity('INFO', f'Multi-material stop requested via web app (command {command_id})', 'web_app')
 
-        return jsonify({'success': True, 'message': 'Multi-material printing stopped'})
+            return jsonify({
+                'success': True,
+                'message': 'Multi-material printing stop requested',
+                'command_id': command_id
+            })
+        else:
+            return jsonify({'success': False, 'message': 'Shared status system not available'}), 503
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
@@ -491,8 +549,11 @@ def api_stop_multi_material():
 def api_emergency_stop():
     """API endpoint for emergency stop"""
     try:
-        # Stop all pumps and processes
-        current_status['mm_active'] = False
+        # Use shared command system for emergency stop
+        if shared_status:
+            command_id = shared_status.add_command('emergency_stop', {})
+            shared_status.log_activity('WARN', f'Emergency stop requested via web app (command {command_id})', 'web_app')
+
         socketio.emit('system_alert', {
             'message': 'Emergency stop activated',
             'type': 'danger'

@@ -46,6 +46,14 @@ from typing import Dict, Optional, Any
 # Set up logger
 logger = logging.getLogger(__name__)
 
+# Import shared status system
+try:
+    from shared_status import get_shared_status
+    shared_status = get_shared_status()
+except ImportError as e:
+    logger.warning(f"Could not import shared_status: {e}")
+    shared_status = None
+
 # Import controller modules with robust error handling
 mmu_control = None
 printer_comms = None
@@ -382,7 +390,7 @@ class PrintManager:
             }
 
     def _send_status_update(self, tag: str, message: str, data: Optional[Dict[str, Any]] = None, level: str = "info"):
-        """Send status update to queue for GUI consumption."""
+        """Send status update to queue for GUI consumption and shared status files."""
         try:
             update = StatusUpdate(
                 timestamp=time.time(),
@@ -392,8 +400,43 @@ class PrintManager:
                 data=data or {}
             )
             self._status_queue.put_nowait(update)
+
+            # Also update shared status files
+            self._update_shared_status(tag, message, data, level)
+
         except queue.Full:
             logger.warning("Status queue full - dropping update")
+
+    def _update_shared_status(self, tag: str, message: str, data: Optional[Dict[str, Any]] = None, level: str = "info"):
+        """Update shared status files for both Qt GUI and web app access."""
+        if shared_status is None:
+            return
+
+        try:
+            # Log activity
+            shared_status.log_activity(level, message, tag.lower())
+
+            # Update specific status based on tag
+            if tag == "PRINTER_STATUS" and data:
+                shared_status.update_printer_status(**data)
+            elif tag == "PUMP_STATUS" and data:
+                pump_name = data.get("pump_name")
+                if pump_name:
+                    pump_data = {k: v for k, v in data.items() if k != "pump_name"}
+                    shared_status.update_pump_status(pump_name, **pump_data)
+                else:
+                    shared_status.update_pump_status(**data)
+            elif tag == "MATERIAL_CHANGE" and data:
+                shared_status.update_recipe_progress(**data)
+            elif tag == "MONITOR" and data:
+                # General monitoring updates
+                if "current_layer" in data:
+                    shared_status.update_printer_status(**data)
+                if "recipe_active" in data:
+                    shared_status.update_recipe_progress(**data)
+
+        except Exception as e:
+            logger.warning(f"Failed to update shared status: {e}")
 
     def _monitoring_loop(self):
         """
@@ -417,9 +460,17 @@ class PrintManager:
                 # Get printer status (suppress debug output)
                 status = self._get_printer_status()
                 if not status:
+                    # Update shared status for printer disconnection
+                    self._send_status_update("PRINTER_STATUS", "Printer disconnected",
+                                           {"printer_connected": False, "printer_status": "Disconnected"}, "warning")
                     if not self._stop_event.wait(self.poll_interval):
                         continue
                     break
+
+                # Update shared status for printer connection
+                printer_status_str = getattr(status, 'status', 'Unknown')
+                self._send_status_update("PRINTER_STATUS", f"Printer status: {printer_status_str}",
+                                       {"printer_connected": True, "printer_status": printer_status_str})
 
                 # Extract current layer
                 current_layer = self._extract_current_layer(status)
@@ -428,12 +479,22 @@ class PrintManager:
                         continue
                     break
 
+                # Update current layer in shared status
+                elapsed = time.time() - self._experiment_start_time
+                layer_data = {
+                    "current_layer": current_layer,
+                    "elapsed_minutes": round(elapsed/60, 1),
+                    "printer_connected": True,
+                    "printer_status": printer_status_str
+                }
+
                 # Only log layer progress when it changes
                 if current_layer != last_layer_logged:
-                    elapsed = time.time() - self._experiment_start_time
-                    self._send_status_update("PROGRESS", f"Layer {current_layer} reached",
-                                           {"current_layer": current_layer, "elapsed_minutes": round(elapsed/60, 1)})
+                    self._send_status_update("PROGRESS", f"Layer {current_layer} reached", layer_data)
                     last_layer_logged = current_layer
+                else:
+                    # Still update shared status even if not logging
+                    self._send_status_update("MONITOR", "Layer monitoring update", layer_data)
 
                 # Check for material changes
                 if current_layer in self.recipe and current_layer != self._last_processed_layer:
