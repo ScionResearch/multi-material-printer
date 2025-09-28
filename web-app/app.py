@@ -665,13 +665,117 @@ def api_test_connection():
             printer_ip = network_config['printer_ip']
 
         # Test connection using printer_comms module
-        result = printer_comms.test_connection(printer_ip)
+        # Create a communicator instance and test the connection
+        from printer_comms import PrinterCommunicator
+        communicator = PrinterCommunicator()
+
+        # Try to get status as a connection test
+        try:
+            status = communicator.get_status()
+            result = status is not None
+            connection_details = f"Status: {getattr(status, 'status', 'Unknown')}" if status else "No response"
+        except Exception as conn_err:
+            result = False
+            connection_details = str(conn_err)
 
         return jsonify({
             'success': result,
-            'message': 'Connection successful' if result else 'Connection failed',
+            'message': f'Connection {"successful" if result else "failed"}: {connection_details}',
             'ip': printer_ip
         })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/printer/files', methods=['GET'])
+def api_get_printer_files():
+    """API endpoint to get list of print files from printer"""
+    try:
+        if not CONTROLLERS_AVAILABLE:
+            return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
+
+        # Get printer files using printer_comms module
+        from printer_comms import PrinterCommunicator
+        communicator = PrinterCommunicator()
+
+        try:
+            files = communicator.get_files()
+            if files:
+                # Convert files to a more structured format
+                file_list = []
+                for file_info in files:
+                    if hasattr(file_info, '__dict__'):
+                        file_data = {
+                            'name': getattr(file_info, 'name', 'Unknown'),
+                            'size': getattr(file_info, 'size', 0),
+                            'date': getattr(file_info, 'date', 'Unknown'),
+                            'type': getattr(file_info, 'type', 'Unknown')
+                        }
+                    else:
+                        # Handle simple string format
+                        file_data = {
+                            'name': str(file_info),
+                            'size': 0,
+                            'date': 'Unknown',
+                            'type': 'Unknown'
+                        }
+                    file_list.append(file_data)
+
+                return jsonify({
+                    'success': True,
+                    'files': file_list,
+                    'count': len(file_list)
+                })
+            else:
+                return jsonify({
+                    'success': True,
+                    'files': [],
+                    'count': 0,
+                    'message': 'No files found on printer'
+                })
+        except Exception as files_err:
+            return jsonify({
+                'success': False,
+                'message': f'Failed to get printer files: {str(files_err)}'
+            })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/printer/start-print', methods=['POST'])
+def api_start_printer_print():
+    """API endpoint to start printing a file on the printer"""
+    try:
+        if not CONTROLLERS_AVAILABLE:
+            return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
+
+        data = request.json
+        filename = data.get('filename')
+
+        if not filename:
+            return jsonify({'success': False, 'message': 'Filename is required'}), 400
+
+        # Start print using printer_comms module
+        from printer_comms import PrinterCommunicator
+        communicator = PrinterCommunicator()
+
+        try:
+            result = communicator.start_print(filename)
+            if result:
+                return jsonify({
+                    'success': True,
+                    'message': f'Print started: {filename}'
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'message': f'Failed to start print: {filename}'
+                })
+        except Exception as print_err:
+            return jsonify({
+                'success': False,
+                'message': f'Print start failed: {str(print_err)}'
+            })
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
