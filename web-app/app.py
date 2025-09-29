@@ -28,11 +28,11 @@ from flask_socketio import SocketIO, emit
 import subprocess
 
 # Add the controller modules to the Python path
-sys.path.append(str(Path(__file__).parent.parent / 'src'))
+sys.path.append(str(Path(__file__).parent.parent / 'src' / 'controller'))
 
 # Import existing controller modules
 try:
-    from controller import printer_comms, mmu_control, photonmmu_pump
+    import printer_comms, mmu_control, photonmmu_pump
     CONTROLLERS_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Could not import controller modules: {e}")
@@ -1003,7 +1003,7 @@ def setup_logging_integration():
     """Setup integration with controller logging system"""
     try:
         # Import logging configuration module
-        sys.path.append(str(Path(__file__).parent.parent / 'src'))
+        sys.path.append(str(Path(__file__).parent.parent / 'src' / 'controller'))
         import logging_config
 
         # Set up web callback for real-time log streaming AND console mirroring
