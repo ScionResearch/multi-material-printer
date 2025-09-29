@@ -51,9 +51,12 @@
                 </ul>
 
                 <!-- Connection Status -->
-                <div class="navbar-text">
-                    <span id="connection-status" class="badge bg-secondary">
-                        <i class="bi bi-circle-fill"></i> Connecting...
+                <div class="navbar-text d-flex gap-2 align-items-center">
+                    <span id="connection-status" class="badge bg-secondary" title="Web UI ↔ Server">
+                        <i class="bi bi-circle-fill"></i> UI Connecting...
+                    </span>
+                    <span id="backend-status" class="badge bg-secondary" title="Print Manager Service">
+                        <i class="bi bi-cpu"></i> Controller Offline
                     </span>
                 </div>
             </div>

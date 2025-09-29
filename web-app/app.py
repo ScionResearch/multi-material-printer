@@ -25,7 +25,7 @@ from pathlib import Path
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_socketio import SocketIO, emit
-import subprocess
+import subprocess  # TODO: remove if no longer needed after full refactor (left temporarily for any remaining usage)
 
 # Add the controller modules to the Python path
 sys.path.append(str(Path(__file__).parent.parent / 'src' / 'controller'))
@@ -78,56 +78,8 @@ current_status = {
     }
 }
 
-status_monitor_thread = None
-status_monitor_running = False
-
-# Process management for print_manager backend
-print_manager_process = None
-import atexit
-
-def start_print_manager():
-    """Starts the print_manager.py script as a background process."""
-    global print_manager_process
-    if print_manager_process and print_manager_process.poll() is None:
-        print("Print manager is already running.")
-        return True
-
-    script_path = str(Path(__file__).parent.parent / 'src' / 'controller' / 'print_manager.py')
-    # Use sys.executable to ensure we use the same python interpreter
-    command = [sys.executable, script_path]
-
-    try:
-        print(f"Starting print manager with command: {' '.join(command)}")
-        # Use Popen for non-blocking execution
-        print_manager_process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-        print(f"Print manager started with PID: {print_manager_process.pid}")
-        return True
-    except Exception as e:
-        print(f"Failed to start print manager: {e}")
-        return False
-
-def stop_print_manager():
-    """Stops the background print manager process."""
-    global print_manager_process
-    if print_manager_process and print_manager_process.poll() is None:
-        print(f"Terminating print manager (PID: {print_manager_process.pid})...")
-        print_manager_process.terminate()
-        try:
-            print_manager_process.wait(timeout=5)
-            print("Print manager stopped gracefully.")
-        except subprocess.TimeoutExpired:
-            print("Print manager did not terminate gracefully, killing.")
-            print_manager_process.kill()
-        print_manager_process = None
-    else:
-        print("Print manager is not running.")
-
-def cleanup_processes():
-    """Clean up any running processes on shutdown"""
-    stop_print_manager()
-
-# Register cleanup function to run on exit
-atexit.register(cleanup_processes)
+status_monitor_thread = None  # deprecated (will be removed)
+status_monitor_running = False  # deprecated
 
 def get_config_path():
     """Get the configuration directory path"""
@@ -278,19 +230,7 @@ def save_recipe(recipe_data):
         return False
 
 def get_printer_status():
-    """Get current printer status using existing controller"""
-    if not CONTROLLERS_AVAILABLE:
-        return None
-
-    try:
-        # Use existing printer communications module
-        status_response = printer_comms.get_status()
-        if status_response:
-            # Parse the status response (this will need adjustment based on actual format)
-            return parse_printer_status(status_response)
-    except Exception as e:
-        print(f"Error getting printer status: {e}")
-
+    """Deprecated: Printer status now pushed from print_manager via WebSocket."""
     return None
 
 def parse_printer_status(status_text):
@@ -338,31 +278,8 @@ def parse_printer_status(status_text):
 
     return status
 
-def status_monitor():
-    """Background thread to monitor printer status from shared files"""
-    global status_monitor_running, current_status
-
-    while status_monitor_running:
-        try:
-            # WebSocket-based status monitoring - status updates come via SocketIO events
-            # current_status is updated via SocketIO handlers, not file polling
-            # Fallback to old method if shared status not available
-            printer_status = get_printer_status()
-            if printer_status:
-                current_status.update({
-                    'printer_connected': printer_status['connected'],
-                    'printer_status': printer_status['state'],
-                    'current_layer': printer_status['layer'],
-                    'progress_percent': printer_status['progress'],
-                    'last_update': datetime.now().isoformat()
-                })
-                socketio.emit('status_update', current_status)
-
-            time.sleep(2)  # Update every 2 seconds
-
-        except Exception as e:
-            print(f"Error in status monitor: {e}")
-            time.sleep(5)  # Wait longer on error
+def status_monitor():  # deprecated
+    return
 
 @app.route('/')
 def index():
@@ -417,30 +334,20 @@ def api_status():
 
 @app.route('/api/printer/<action>', methods=['POST'])
 def api_printer_control(action):
-    """API endpoint for printer control commands"""
-    if not CONTROLLERS_AVAILABLE:
-        return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
+    """API endpoint for printer control commands (delegated)."""
+    valid = {'pause': 'pause_print', 'resume': 'resume_print', 'stop': 'stop_print'}
+    if action not in valid:
+        return jsonify({'success': False, 'message': 'Invalid action'}), 400
 
-    try:
-        if action == 'pause':
-            result = printer_comms.pause_print()
-        elif action == 'resume':
-            result = printer_comms.resume_print()
-        elif action == 'stop':
-            result = printer_comms.stop_print()
-        else:
-            return jsonify({'success': False, 'message': 'Invalid action'}), 400
+    command_id = send_command_to_print_manager(valid[action], {})
+    if not command_id:
+        return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
 
-        return jsonify({'success': result, 'action': action})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+    return jsonify({'success': True, 'action': action, 'command_id': command_id})
 
 @app.route('/api/pump', methods=['POST'])
 def api_pump_control():
     """API endpoint for manual pump control"""
-    if not CONTROLLERS_AVAILABLE:
-        return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
-
     try:
         data = request.json
         motor = data.get('motor', '').upper()
@@ -464,45 +371,20 @@ def api_pump_control():
             'duration': duration
         })
 
-        if command_id:
-            return jsonify({
-                'success': True,
-                'message': f'Pump {motor} command sent ({direction} for {duration}s)',
-                'command_id': command_id
-            })
-        else:
-            # Fallback to direct control if shared status not available
-            pump_map = {'A': 'pump_a', 'B': 'pump_b', 'C': 'pump_c', 'D': 'drain_pump'}
-            pump_name = pump_map.get(motor, f'pump_{motor.lower()}')
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
 
-            current_status['pump_status'][pump_name] = f'running_{direction.lower()}'
-            current_status['current_operation'] = f'manual_pump_{pump_name}'
-            current_status['operation_start_time'] = datetime.now().isoformat()
-            socketio.emit('status_update', current_status)
-
-            # Execute pump command using existing photonmmu_pump module
-            result = photonmmu_pump.run_stepper(motor, direction, duration)
-
-            # Reset pump status
-            current_status['pump_status'][pump_name] = 'idle'
-            current_status['current_operation'] = 'idle'
-            if current_status['operation_start_time']:
-                start_time = datetime.fromisoformat(current_status['operation_start_time'])
-                current_status['operation_duration'] = (datetime.now() - start_time).total_seconds()
-
-            socketio.emit('status_update', current_status)
-
-            return jsonify({'success': True, 'message': f'Pump {motor} completed {direction} for {duration}s'})
+        return jsonify({
+            'success': True,
+            'message': f'Pump {motor} command sent ({direction} for {duration}s)',
+            'command_id': command_id
+        })
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/multi-material/start', methods=['POST'])
 def api_start_multi_material():
     """API endpoint to start multi-material printing"""
-    # First ensure print manager is running
-    if not start_print_manager():
-        return jsonify({'success': False, 'message': 'Failed to start the backend print manager service.'}), 500
-
     try:
         recipe_path = get_recipe_path()
         if not recipe_path.exists():
@@ -513,19 +395,14 @@ def api_start_multi_material():
             'recipe_path': str(recipe_path)
         })
 
-        if command_id:
-            # Update local status for immediate UI feedback
-            current_status['mm_active'] = True
-            current_status['current_operation'] = 'starting'
-            socketio.emit('status_update', current_status)
-
-            return jsonify({
-                'success': True,
-                'message': 'Multi-material printing start requested',
-                'command_id': command_id
-            })
-        else:
+        if not command_id:
             return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+
+        return jsonify({
+            'success': True,
+            'message': 'Multi-material printing start requested',
+            'command_id': command_id
+        })
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -534,22 +411,10 @@ def api_start_multi_material():
 def api_stop_multi_material():
     """API endpoint to stop multi-material printing"""
     try:
-        # Send stop command first
-        # Send command via WebSocket to print manager
-        command_data = {
-            'type': 'stop_multi_material',
-            'parameters': {},
-            'timestamp': datetime.now().isoformat()
-        }
-        socketio.emit('command', command_data)
-
-        # Stop the print manager process
-        stop_print_manager()
-
-        return jsonify({
-            'success': True,
-            'message': 'Multi-material printing process stopped.'
-        })
+        command_id = send_command_to_print_manager('stop_multi_material', {})
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+        return jsonify({'success': True, 'message': 'Stop requested', 'command_id': command_id})
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -558,7 +423,7 @@ def api_stop_multi_material():
 def api_material_change_sequence():
     """API endpoint to run complete material change sequence"""
     try:
-        data = request.json
+        data = request.json or {}
         target_material = data.get('target_material')
         sequence_config = data.get('config', {})
 
@@ -625,7 +490,7 @@ def api_get_pump_config():
 def api_save_pump_config():
     """API endpoint to save pump configuration"""
     try:
-        config_data = request.json
+        config_data = request.json or {}
         config_file = get_config_path() / 'pump_profiles.json'
 
         # Validate configuration structure
@@ -664,7 +529,7 @@ def api_get_network_config():
 def api_save_network_config():
     """API endpoint to save network configuration"""
     try:
-        config_data = request.json
+        config_data = request.json or {}
         config_file = get_config_path() / 'network_settings.ini'
 
         # Create backup
@@ -816,36 +681,14 @@ def api_get_printer_files():
 def api_start_printer_print():
     """API endpoint to start printing a file on the printer"""
     try:
-        if not CONTROLLERS_AVAILABLE:
-            return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
-
-        data = request.json
+        data = request.json or {}
         filename = data.get('filename')
-
         if not filename:
             return jsonify({'success': False, 'message': 'Filename is required'}), 400
-
-        # Start print using printer_comms module
-        from printer_comms import PrinterCommunicator
-        communicator = PrinterCommunicator()
-
-        try:
-            result = communicator.start_print(filename)
-            if result:
-                return jsonify({
-                    'success': True,
-                    'message': f'Print started: {filename}'
-                })
-            else:
-                return jsonify({
-                    'success': False,
-                    'message': f'Failed to start print: {filename}'
-                })
-        except Exception as print_err:
-            return jsonify({
-                'success': False,
-                'message': f'Print start failed: {str(print_err)}'
-            })
+        command_id = send_command_to_print_manager('start_printer_print', {'filename': filename})
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+        return jsonify({'success': True, 'message': f'Print start requested: {filename}', 'command_id': command_id})
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -923,7 +766,7 @@ def api_get_recent_logs():
 def api_set_log_level():
     """API endpoint to change log level for a component"""
     try:
-        data = request.json
+        data = request.json or {}
         component = data.get('component')
         level = data.get('level')
 
@@ -1096,34 +939,38 @@ connected_clients = {
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection for WebSocket"""
-    print(f'Client connected: {request.sid}')
-    connected_clients['web_clients'].add(request.sid)
+    # Flask-SocketIO provides request.sid at runtime; ignore static type checker
+    sid = getattr(request, 'sid', None)  # type: ignore[attr-defined]
+    if sid:
+        print(f'Client connected: {sid}')
+        connected_clients['web_clients'].add(sid)
     emit('status_update', current_status)
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""
-    print(f'Client disconnected: {request.sid}')
-
-    # Remove from web clients
-    connected_clients['web_clients'].discard(request.sid)
-
-    # Check if this was the print manager
-    if connected_clients['print_manager'] == request.sid:
-        connected_clients['print_manager'] = None
-        print('Print manager disconnected')
+    sid = getattr(request, 'sid', None)  # type: ignore[attr-defined]
+    if sid:
+        print(f'Client disconnected: {sid}')
+        connected_clients['web_clients'].discard(sid)
+        if connected_clients['print_manager'] == sid:
+            connected_clients['print_manager'] = None
+            print('Print manager disconnected')
+            emit('system_status', {
+                'print_manager_connected': False,
+                'timestamp': datetime.now().isoformat()
+            }, broadcast=True)
 
 @socketio.on('client_register')
 def handle_client_register(data):
     """Handle client registration (print manager identification)"""
-    client_type = data.get('client_type')
-    print(f"Client registration: {client_type} from {request.sid}")
+    client_type = data.get('client_type') if isinstance(data, dict) else None
+    sid = getattr(request, 'sid', None)  # type: ignore[attr-defined]
+    print(f"Client registration: {client_type} from {sid}")
 
-    if client_type == 'print_manager':
-        connected_clients['print_manager'] = request.sid
+    if client_type == 'print_manager' and sid:
+        connected_clients['print_manager'] = sid
         print('Print manager registered and connected')
-
-        # Notify web clients that print manager is online
         emit('system_status', {
             'print_manager_connected': True,
             'timestamp': datetime.now().isoformat()
@@ -1213,25 +1060,15 @@ def send_command_to_print_manager(command_type, parameters=None, command_id=None
     print(f"Sending command to print manager: {command_type}")
 
     # Send command directly to print manager client
-    socketio.emit('command', command_data, room=connected_clients['print_manager'])
+    socketio.emit('command', command_data, to=connected_clients['print_manager'])
 
     return command_id
 
-def start_status_monitor():
-    """Start the background status monitoring thread"""
-    global status_monitor_thread, status_monitor_running
+def start_status_monitor():  # deprecated
+    pass
 
-    if status_monitor_thread is None or not status_monitor_thread.is_alive():
-        status_monitor_running = True
-        status_monitor_thread = threading.Thread(target=status_monitor, daemon=True)
-        status_monitor_thread.start()
-        print("Status monitor started")
-
-def stop_status_monitor():
-    """Stop the background status monitoring thread"""
-    global status_monitor_running
-    status_monitor_running = False
-    print("Status monitor stopped")
+def stop_status_monitor():  # deprecated
+    pass
 
 
 if __name__ == '__main__':
@@ -1245,15 +1082,7 @@ if __name__ == '__main__':
     logging_available = setup_logging_integration()
     print(f"Logging integration: {'enabled' if logging_available else 'disabled'}")
 
-    # Start background monitoring
-    start_status_monitor()
-
-    # Start print manager backend automatically
-    print("Starting print manager backend...")
-    if start_print_manager():
-        print("Print manager backend started successfully")
-    else:
-        print("Warning: Could not start print manager backend")
+    print("Expecting external persistent print_manager service (no auto-spawn).")
 
     try:
         # Run the Flask application
@@ -1262,4 +1091,3 @@ if __name__ == '__main__':
         print("\nShutting down...")
     finally:
         stop_status_monitor()
-        stop_print_manager()

@@ -190,6 +190,11 @@ class PrintManager:
         else:
             logger.warning("WebSocket IPC not available - falling back to file-based communication")
 
+        # Quiescence management: window where we intentionally avoid sending
+        # additional printer control commands after a pause to allow mechanical
+        # bed raise and firmware internal sequences to complete.
+        self._quiescent_until: float = 0.0
+
         logger.info(f"Multi-Material Printer Ready - IP: {self.printer_ip}")
 
     def _find_config_path(self) -> Path:
@@ -530,7 +535,14 @@ class PrintManager:
                         logger.warning("No WebSocket connection available for receiving commands")
 
                 # Get printer status (suppress debug output)
-                status = self._get_printer_status()
+                status = None
+                # Suppress polling during quiescent window to reduce printer command load
+                if time.time() >= self._quiescent_until:
+                    status = self._get_printer_status()
+                else:
+                    # Still emit a lightweight status heartbeat so UI knows we're alive
+                    remaining = round(self._quiescent_until - time.time(), 1)
+                    self._send_status_update("QUIESCENCE", f"Quiescent window active ({remaining}s remaining)")
                 if not status:
                     # Update shared status for printer disconnection
                     self._send_status_update("PRINTER_STATUS", "Printer disconnected",
@@ -675,6 +687,7 @@ class PrintManager:
             self._send_status_update("TIMING", "Step 1: Pausing printer...")
             if not self._pause_printer():
                 self._send_status_update("MATERIAL", "ERROR: Could not pause printer", level="error")
+                self._enter_error_state("Failed to pause printer prior to material change", {"target_material": material})
                 return False
 
             # Step 2: Wait for bed to rise
@@ -687,9 +700,7 @@ class PrintManager:
 
             if mmu_control is None:
                 self._send_status_update("MATERIAL", "ERROR: MMU control not available - imports failed", level="error")
-                # Log import status for debugging
-                self._send_status_update("MATERIAL", f"Current working directory: {os.getcwd()}", level="error")
-                self._send_status_update("MATERIAL", f"Python path: {sys.path}", level="error")
+                self._enter_error_state("MMU controller unavailable", {"cwd": os.getcwd()})
                 return False
 
             self._send_status_update("TIMING", f"Starting MMU change_material({material})...")
@@ -700,6 +711,7 @@ class PrintManager:
                 self._send_status_update("TIMING", f"✓ Pump sequence completed in {pump_duration:.1f}s")
             else:
                 self._send_status_update("MATERIAL", "ERROR: Pump sequence failed", level="error")
+                self._enter_error_state("Pump sequence failed during material change", {"target_material": material, "duration": pump_duration})
                 return False
 
             # Step 4: Resume printer
@@ -709,18 +721,34 @@ class PrintManager:
                 return True
             else:
                 self._send_status_update("MATERIAL", "ERROR: Could not resume printer", level="error")
+                self._enter_error_state("Failed to resume printer after material change", {"target_material": material})
                 return False
 
         except Exception as e:
             self._send_status_update("MATERIAL", f"ERROR: Material change failed: {e}", level="error")
+            self._enter_error_state("Unhandled exception in material change", {"error": str(e), "target_material": material})
             return False
+
+    def _enter_error_state(self, reason: str, data: Optional[Dict[str, Any]] = None):
+        """Centralize transition to ERROR state with status emission and stop signal."""
+        with self._state_lock:
+            self.state = PrintManagerState.ERROR
+        self._stop_event.set()
+        self._send_status_update("SYSTEM", f"ERROR STATE: {reason}", data or {}, level="error")
 
     def _pause_printer(self) -> bool:
         """Pause printer via uart-wifi."""
         try:
             if printer_comms is None:
                 return False
-            return printer_comms.pause_print(self.printer_ip)
+            success = printer_comms.pause_print(self.printer_ip)
+            if success:
+                # Establish 10 second quiescent window (configurable via env var) to prevent
+                # race conditions where subsequent commands interfere with firmware pause sequence.
+                quiescent_seconds = float(os.environ.get('MMU_PAUSE_QUIESCENCE_SECONDS', '10'))
+                self._quiescent_until = time.time() + quiescent_seconds
+                self._send_status_update("QUIESCENCE", f"Quiescent window started for {quiescent_seconds}s after pause")
+            return success
         except Exception as e:
             logger.error(f"Error pausing printer: {e}")
             return False
@@ -730,7 +758,17 @@ class PrintManager:
         try:
             if printer_comms is None:
                 return False
-            return printer_comms.resume_print(self.printer_ip)
+            # Ensure we are outside quiescent window before resuming
+            if time.time() < self._quiescent_until:
+                wait_time = round(self._quiescent_until - time.time(), 2)
+                self._send_status_update("QUIESCENCE", f"Waiting {wait_time}s to exit quiescent window before resume")
+                while time.time() < self._quiescent_until and not self._stop_event.wait(0.25):
+                    pass
+            success = printer_comms.resume_print(self.printer_ip)
+            if success:
+                # Clear quiescent window on successful resume
+                self._quiescent_until = 0.0
+            return success
         except Exception as e:
             logger.error(f"Error resuming printer: {e}")
             return False
@@ -1105,15 +1143,15 @@ class PrintManager:
             # Test printer connectivity
             self._send_status_update("DIAGNOSTICS", "=== Printer Connectivity Test ===")
             printer_ok = False
-            if self.printer_comm:
+            if printer_comms:
                 try:
-                    status = self.printer_comm.get_status()
+                    status = printer_comms.get_status(self.printer_ip)
                     printer_ok = status is not None
                     self._send_status_update("DIAGNOSTICS", f"Printer connection: {'OK' if printer_ok else 'FAILED'}")
                 except Exception as e:
                     self._send_status_update("DIAGNOSTICS", f"Printer test failed: {e}", level="error")
             else:
-                self._send_status_update("DIAGNOSTICS", "Printer communication not initialized", level="warning")
+                self._send_status_update("DIAGNOSTICS", "Printer communication module missing", level="warning")
 
             # Summary
             self._send_status_update("DIAGNOSTICS", "=== Diagnostics Summary ===")

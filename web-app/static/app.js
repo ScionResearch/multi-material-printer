@@ -3,6 +3,7 @@
 // Global variables
 let socket = null;
 let connectionStatus = 'disconnected';
+let backendStatus = 'offline';
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -43,6 +44,27 @@ function initializeSocket() {
     socket.on('system_alert', function(data) {
         showAlert(data.message, data.type || 'info');
     });
+
+    socket.on('system_status', function(data) {
+        if (typeof data.print_manager_connected === 'boolean') {
+            backendStatus = data.print_manager_connected ? 'online' : 'offline';
+            updateBackendIndicator();
+        }
+    });
+
+    // Also derive backend status from status updates tagged WEBSOCKET
+    socket.on('status_update', function(data) {
+        if (data.component === 'WEBSOCKET') {
+            if (data.status && data.status.toLowerCase().includes('connected')) {
+                backendStatus = 'online';
+                updateBackendIndicator();
+            }
+            if (data.status && data.status.toLowerCase().includes('disconnected')) {
+                backendStatus = 'offline';
+                updateBackendIndicator();
+            }
+        }
+    });
 }
 
 function updateConnectionIndicator() {
@@ -65,6 +87,21 @@ function updateConnectionIndicator() {
         default:
             indicator.className = 'badge bg-secondary';
             indicator.innerHTML = '<i class="bi bi-circle-fill"></i> Connecting...';
+    }
+}
+
+function updateBackendIndicator() {
+    const indicator = document.getElementById('backend-status');
+    if (!indicator) return;
+    if (backendStatus === 'online') {
+        indicator.className = 'badge bg-success';
+        indicator.innerHTML = '<i class="bi bi-cpu"></i> Controller Online';
+    } else if (backendStatus === 'offline') {
+        indicator.className = 'badge bg-danger';
+        indicator.innerHTML = '<i class="bi bi-cpu"></i> Controller Offline';
+    } else {
+        indicator.className = 'badge bg-secondary';
+        indicator.innerHTML = '<i class="bi bi-cpu"></i> Controller Unknown';
     }
 }
 
