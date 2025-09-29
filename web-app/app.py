@@ -28,13 +28,11 @@ from flask_socketio import SocketIO, emit
 import subprocess
 
 # Add the controller modules to the Python path
-sys.path.append(str(Path(__file__).parent.parent / 'src' / 'controller'))
+sys.path.append(str(Path(__file__).parent.parent / 'src'))
 
 # Import existing controller modules
 try:
-    import printer_comms
-    import mmu_control
-    import photonmmu_pump
+    from controller import printer_comms, mmu_control, photonmmu_pump
     CONTROLLERS_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Could not import controller modules: {e}")
@@ -43,7 +41,7 @@ except ImportError as e:
 
 # Import shared status system
 try:
-    from shared_status import get_shared_status
+    from controller.shared_status import get_shared_status
     shared_status = get_shared_status()
     print("Shared status system initialized")
 except ImportError as e:
@@ -282,22 +280,35 @@ def parse_printer_status(status_text):
         status['connected'] = False
         return status
 
-    # Parse status text - adapt based on actual uart-wifi response format
-    lines = status_text.strip().split('\n')
-    for line in lines:
-        line = line.strip().lower()
-        if 'status:' in line:
-            status['state'] = line.split(':', 1)[1].strip()
-        elif 'current_layer:' in line:
-            try:
-                status['layer'] = int(line.split(':', 1)[1].strip())
-            except ValueError:
-                pass
-        elif 'percent_complete:' in line:
-            try:
-                status['progress'] = float(line.split(':', 1)[1].strip())
-            except ValueError:
-                pass
+    # Handle both object and string responses
+    if hasattr(status_text, 'status'):
+        # Handle MonoXStatus object directly
+        status['state'] = getattr(status_text, 'status', 'Unknown')
+        status['layer'] = getattr(status_text, 'current_layer', 0)
+        status['progress'] = getattr(status_text, 'percent_complete', 0)
+    else:
+        # Parse string format
+        lines = str(status_text).strip().split('\n')
+        for line in lines:
+            line = line.strip().lower()
+            if 'status:' in line:
+                status['state'] = line.split(':', 1)[1].strip()
+            elif any(x in line for x in ['current_layer:', 'current_lay:', 'layer:']):
+                try:
+                    import re
+                    match = re.search(r'(\d+)', line)
+                    if match:
+                        status['layer'] = int(match.group(1))
+                except ValueError:
+                    pass
+            elif 'percent' in line:
+                try:
+                    import re
+                    match = re.search(r'(\d+(?:\.\d+)?)', line)
+                    if match:
+                        status['progress'] = float(match.group(1))
+                except ValueError:
+                    pass
 
     return status
 
@@ -513,6 +524,11 @@ def api_start_multi_material():
                 'recipe_path': str(recipe_path)
             })
             shared_status.log_activity('INFO', f'Multi-material start requested via web app (command {command_id})', 'web_app')
+
+            # Update local status for immediate UI feedback
+            current_status['mm_active'] = True
+            current_status['current_operation'] = 'starting'
+            socketio.emit('status_update', current_status)
 
             return jsonify({
                 'success': True,
@@ -923,7 +939,7 @@ def setup_logging_integration():
     """Setup integration with controller logging system"""
     try:
         # Import logging configuration module
-        sys.path.append(str(Path(__file__).parent.parent / 'src' / 'controller'))
+        sys.path.append(str(Path(__file__).parent.parent / 'src'))
         import logging_config
 
         # Set up web callback for real-time log streaming AND console mirroring
@@ -988,92 +1004,6 @@ def stop_status_monitor():
     status_monitor_running = False
     print("Status monitor stopped")
 
-def run_print_manager(recipe_path):
-    """Run the print manager in a separate process"""
-    try:
-        # Get printer IP from config
-        config_path = get_config_path() / 'network_settings.ini'
-        printer_ip = '192.168.4.3'  # Default
-
-        if config_path.exists():
-            import configparser
-            config = configparser.ConfigParser()
-            config.read(config_path)
-            printer_ip = config.get('printer', 'ip_address', fallback='192.168.4.3')
-
-        # Build command to run print manager
-        controller_dir = Path(__file__).parent.parent / 'src' / 'controller'
-        script_path = controller_dir / 'print_manager.py'
-
-        cmd = [
-            'python3', str(script_path),
-            '--recipe', recipe_path,
-            '--printer-ip', printer_ip
-        ]
-
-        # Run print manager and capture output
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=str(controller_dir)
-        )
-
-        # Track the process
-        active_processes['print_manager'] = process
-
-        # Update status with timing
-        current_status['current_operation'] = 'multi_material_printing'
-        current_status['operation_start_time'] = datetime.now().isoformat()
-        socketio.emit('status_update', current_status)
-
-        # Monitor output and emit via WebSocket
-        while True:
-            output = process.stdout.readline()
-            if output == '' and process.poll() is not None:
-                break
-            if output:
-                # Parse and emit status updates
-                socketio.emit('material_change_log', {'message': output.strip()})
-
-        # Check if process completed successfully
-        return_code = process.poll()
-
-        # Calculate operation duration
-        if current_status['operation_start_time']:
-            start_time = datetime.fromisoformat(current_status['operation_start_time'])
-            duration = (datetime.now() - start_time).total_seconds()
-            current_status['operation_duration'] = duration
-
-        # Clean up process tracking
-        active_processes.pop('print_manager', None)
-
-        if return_code == 0:
-            current_status['current_operation'] = 'completed'
-            socketio.emit('system_alert', {
-                'message': f'Multi-material printing completed successfully in {duration:.1f}s',
-                'type': 'success'
-            })
-        else:
-            current_status['current_operation'] = 'error'
-            error_output = process.stderr.read()
-            socketio.emit('system_alert', {
-                'message': f'Print manager failed after {duration:.1f}s: {error_output}',
-                'type': 'danger'
-            })
-
-        current_status['mm_active'] = False
-        socketio.emit('status_update', current_status)
-
-    except Exception as e:
-        print(f"Error running print manager: {e}")
-        socketio.emit('system_alert', {
-            'message': f'Failed to start print manager: {e}',
-            'type': 'danger'
-        })
-        current_status['mm_active'] = False
-        socketio.emit('status_update', current_status)
 
 if __name__ == '__main__':
     print("Scion Multi-Material Printer Web Interface")

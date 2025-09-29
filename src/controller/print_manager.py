@@ -457,6 +457,14 @@ class PrintManager:
             while not self._stop_event.is_set():
                 loop_count += 1
 
+                # Check for commands from shared status system
+                if shared_status:
+                    pending_commands = shared_status.get_pending_commands()
+                    for command in pending_commands:
+                        if command["status"] == "pending":
+                            self._process_shared_command(command)
+                            shared_status.mark_command_processed(command["id"])
+
                 # Get printer status (suppress debug output)
                 status = self._get_printer_status()
                 if not status:
@@ -778,6 +786,31 @@ class PrintManager:
 
         except Exception as e:
             return False
+
+    def _process_shared_command(self, command):
+        """Process commands from shared status system."""
+        cmd_type = command["command"]
+        params = command.get("parameters", {})
+
+        if cmd_type == "start_multi_material":
+            recipe_path = params.get("recipe_path")
+            if recipe_path and os.path.exists(recipe_path):
+                self.load_recipe(recipe_path)
+                self._send_status_update("COMMAND", f"Loaded recipe: {recipe_path}")
+        elif cmd_type == "stop_multi_material":
+            self._stop_event.set()
+            self._send_status_update("COMMAND", "Stop command received")
+        elif cmd_type == "emergency_stop":
+            self._stop_event.set()
+            self._send_status_update("COMMAND", "Emergency stop activated", level="warning")
+        elif cmd_type == "pump_control":
+            # Handle manual pump control
+            if mmu_control:
+                motor = params.get("motor")
+                direction = params.get("direction")
+                duration = params.get("duration")
+                success = mmu_control.run_pump_manual(motor, direction, duration)
+                self._send_status_update("PUMP", f"Manual pump {motor} {direction} {duration}s: {'success' if success else 'failed'}")
 
 
 def main():

@@ -90,73 +90,45 @@ class PrinterCommunicator:
         
     def _run_printer_command(self, command):
         """
-        Execute printer command via uart-wifi library.
-        Based on newmonox.py implementation with retry logic.
+        Execute printer command via uart-wifi library directly.
+        Simplified efficient implementation without subprocess overhead.
 
         Args:
             command (str): Command to send ('getstatus', 'gopause', etc.)
 
         Returns:
-            str: Response data or error message
+            str: Response data or None if failed
         """
         import time
-        import subprocess
-        import sys
-        import os
 
-        # Try 3 times to get the data (matching newmonox.py behavior)
+        if not UART_WIFI_AVAILABLE:
+            return None
+
+        # Try 3 times to get the data (matching original behavior)
         for attempt in range(3):
             try:
-                # Use subprocess approach like Qt GUI does to capture ALL stdout
-                # This captures both the uart-wifi library prints AND any return values
-                script_dir = os.path.dirname(os.path.abspath(__file__))
-                python_cmd = [
-                    sys.executable, '-c',
-                    f"""
-import sys
-sys.path.append('{script_dir}')
-try:
-    from uart_wifi.communication import UartWifi
-    from uart_wifi.errors import ConnectionException
-    from uart_wifi.response import MonoXResponseType
+                uart = UartWifi(self.printer_ip, self.printer_port)
+                responses = uart.send_request(command)
 
-    uart = UartWifi('{self.printer_ip}', {self.printer_port})
-    responses = uart.send_request('{command}')
-
-    # Process responses and let uart-wifi print to stdout naturally
-    if responses is not None:
-        for response in responses:
-            if hasattr(response, 'print'):
-                response.print()
-            elif response is not None:
-                print(str(response))
-
-except Exception as e:
-    print(f"Error: {{e}}")
-"""
-                ]
-
-                result = subprocess.run(
-                    python_cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=30
-                )
-
-                if result.returncode == 0:
-                    # Return the captured stdout which includes uart-wifi prints
-                    return result.stdout.strip()
+                if responses:
+                    # Convert response objects to strings for consistency
+                    response_text = ""
+                    for response in responses:
+                        if hasattr(response, '__str__'):
+                            response_text += str(response) + "\n"
+                    return response_text.strip()
                 else:
-                    # If there's an error, continue to next attempt
-                    time.sleep(1)
-                    continue
+                    return ""
 
-            except (subprocess.TimeoutExpired, subprocess.SubprocessError, ConnectionException):
-                time.sleep(1)  # Wait before retry
+            except ConnectionException:
+                time.sleep(1)
+                continue
+            except Exception as e:
+                time.sleep(1)
                 continue
 
-        # If all 3 attempts failed
-        raise ConnectionException(f"Failed to send command after 3 attempts.")
+        # All attempts failed
+        raise ConnectionException(f"Failed to send command '{command}' after 3 attempts.")
     
     def get_status(self):
         """
