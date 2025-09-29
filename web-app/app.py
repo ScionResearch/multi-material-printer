@@ -344,58 +344,19 @@ def status_monitor():
 
     while status_monitor_running:
         try:
-            if shared_status:
-                # Read all status from shared files
-                all_status = shared_status.get_all_status()
-
-                # Update current_status with shared file data
-                printer_status = all_status.get('printer', {})
-                pump_status = all_status.get('pumps', {})
-                recipe_status = all_status.get('recipe', {})
-
+            # WebSocket-based status monitoring - status updates come via SocketIO events
+            # current_status is updated via SocketIO handlers, not file polling
+            # Fallback to old method if shared status not available
+            printer_status = get_printer_status()
+            if printer_status:
                 current_status.update({
-                    'printer_connected': printer_status.get('printer_connected', False),
-                    'printer_status': printer_status.get('printer_status', 'Unknown'),
-                    'current_layer': printer_status.get('current_layer', 0),
-                    'total_layers': printer_status.get('total_layers', 0),
-                    'progress_percent': printer_status.get('progress_percent', 0.0),
-                    'current_material': recipe_status.get('current_material', 'None'),
-                    'next_material': recipe_status.get('next_material', 'None'),
-                    'next_change_layer': recipe_status.get('next_change_layer', 0),
-                    'mm_active': recipe_status.get('recipe_active', False),
-                    'last_update': all_status.get('last_update', datetime.now().isoformat()),
-                    'current_operation': pump_status.get('current_operation', 'idle'),
-                    'operation_start_time': recipe_status.get('operation_start_time'),
-                    'operation_duration': recipe_status.get('operation_duration', 0),
-                    'estimated_completion': recipe_status.get('estimated_completion'),
-                    'pump_status': {
-                        'pump_a': pump_status.get('pump_a', {}).get('status', 'idle'),
-                        'pump_b': pump_status.get('pump_b', {}).get('status', 'idle'),
-                        'pump_c': pump_status.get('pump_c', {}).get('status', 'idle'),
-                        'drain_pump': pump_status.get('drain_pump', {}).get('status', 'idle')
-                    },
-                    'sequence_progress': {
-                        'current_step': recipe_status.get('current_step', 0),
-                        'total_steps': recipe_status.get('total_steps', 0),
-                        'step_name': pump_status.get('operation_step', ''),
-                        'step_progress': pump_status.get('step_progress', 0)
-                    }
+                    'printer_connected': printer_status['connected'],
+                    'printer_status': printer_status['state'],
+                    'current_layer': printer_status['layer'],
+                    'progress_percent': printer_status['progress'],
+                    'last_update': datetime.now().isoformat()
                 })
-
-                # Emit status update to connected clients
                 socketio.emit('status_update', current_status)
-            else:
-                # Fallback to old method if shared status not available
-                printer_status = get_printer_status()
-                if printer_status:
-                    current_status.update({
-                        'printer_connected': printer_status['connected'],
-                        'printer_status': printer_status['state'],
-                        'current_layer': printer_status['layer'],
-                        'progress_percent': printer_status['progress'],
-                        'last_update': datetime.now().isoformat()
-                    })
-                    socketio.emit('status_update', current_status)
 
             time.sleep(2)  # Update every 2 seconds
 
@@ -574,9 +535,13 @@ def api_stop_multi_material():
     """API endpoint to stop multi-material printing"""
     try:
         # Send stop command first
-        if shared_status:
-            command_id = shared_status.add_command('stop_multi_material', {})
-            shared_status.log_activity('INFO', f'Multi-material stop requested via web app (command {command_id})', 'web_app')
+        # Send command via WebSocket to print manager
+        command_data = {
+            'type': 'stop_multi_material',
+            'parameters': {},
+            'timestamp': datetime.now().isoformat()
+        }
+        socketio.emit('command', command_data)
 
         # Stop the print manager process
         stop_print_manager()
@@ -603,24 +568,24 @@ def api_material_change_sequence():
         if target_material not in ['A', 'B', 'C', 'D']:
             return jsonify({'success': False, 'message': 'Invalid target material'}), 400
 
-        # Use shared command system to request material change sequence
-        if shared_status:
-            command_id = shared_status.add_command('run_material_change', {
+        # Send command via WebSocket to print manager
+        command_data = {
+            'type': 'run_material_change',
+            'parameters': {
                 'target_material': target_material,
                 'drain_time': sequence_config.get('drain_time', 30),
                 'fill_time': sequence_config.get('fill_time', 25),
                 'mix_time': sequence_config.get('mix_time', 10),
                 'settle_time': sequence_config.get('settle_time', 5)
-            })
-            shared_status.log_activity('INFO', f'Material change sequence to {target_material} requested via web app (command {command_id})', 'web_app')
+            },
+            'timestamp': datetime.now().isoformat()
+        }
+        socketio.emit('command', command_data)
 
-            return jsonify({
-                'success': True,
-                'message': f'Material change sequence to {target_material} started',
-                'command_id': command_id
-            })
-        else:
-            return jsonify({'success': False, 'message': 'Shared status system not available'}), 503
+        return jsonify({
+            'success': True,
+            'message': f'Material change sequence to {target_material} started via WebSocket'
+        })
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -630,9 +595,13 @@ def api_emergency_stop():
     """API endpoint for emergency stop"""
     try:
         # Use shared command system for emergency stop
-        if shared_status:
-            command_id = shared_status.add_command('emergency_stop', {})
-            shared_status.log_activity('WARN', f'Emergency stop requested via web app (command {command_id})', 'web_app')
+        # Send emergency stop command via WebSocket to print manager
+        command_data = {
+            'type': 'emergency_stop',
+            'parameters': {},
+            'timestamp': datetime.now().isoformat()
+        }
+        socketio.emit('command', command_data)
 
         socketio.emit('system_alert', {
             'message': 'Emergency stop activated',
