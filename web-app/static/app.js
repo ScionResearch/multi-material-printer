@@ -746,3 +746,224 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Initialize theme on load
 loadSavedTheme();
+
+// ==========================================
+// PRINT FILE MANAGEMENT FUNCTIONS
+// ==========================================
+
+let selectedPrintFile = null;
+
+// Refresh print files list
+async function refreshPrintFiles() {
+    const loadingDiv = document.getElementById('print-files-loading');
+    const emptyDiv = document.getElementById('print-files-empty');
+    const errorDiv = document.getElementById('print-files-error');
+    const listDiv = document.getElementById('print-files-list');
+    const refreshBtn = document.getElementById('refresh-files-btn');
+
+    // Show loading state
+    hideAllFileStates();
+    loadingDiv.style.display = 'block';
+    refreshBtn.disabled = true;
+
+    try {
+        const response = await fetch('/api/printer/files');
+        const result = await response.json();
+
+        if (result.success) {
+            if (result.files && result.files.length > 0) {
+                displayPrintFiles(result.files);
+                listDiv.style.display = 'block';
+            } else {
+                emptyDiv.style.display = 'block';
+            }
+        } else {
+            showFileError(result.message || 'Failed to load print files');
+        }
+    } catch (error) {
+        console.error('Error fetching print files:', error);
+        showFileError('Network error: Could not connect to printer');
+    } finally {
+        loadingDiv.style.display = 'none';
+        refreshBtn.disabled = false;
+    }
+}
+
+// Display print files in the UI
+function displayPrintFiles(files) {
+    const listDiv = document.getElementById('print-files-list');
+    listDiv.innerHTML = '';
+
+    files.forEach(file => {
+        const fileCard = createFileCard(file);
+        listDiv.appendChild(fileCard);
+    });
+}
+
+// Create a file card element
+function createFileCard(file) {
+    const colDiv = document.createElement('div');
+    colDiv.className = 'col-md-6 col-lg-4 mb-3';
+
+    const cardDiv = document.createElement('div');
+    cardDiv.className = 'card file-card h-100';
+    cardDiv.style.cursor = 'pointer';
+    cardDiv.onclick = () => selectPrintFile(file, cardDiv);
+
+    const fileSize = formatFileSize(file.size);
+    const fileType = file.type || 'Unknown';
+
+    cardDiv.innerHTML = `
+        <div class="card-body p-3">
+            <div class="d-flex align-items-start">
+                <div class="file-icon me-3">
+                    <i class="bi bi-file-earmark-text fs-2 text-primary"></i>
+                </div>
+                <div class="file-info flex-grow-1">
+                    <h6 class="card-title mb-1 text-truncate" title="${file.name}">${file.name}</h6>
+                    <p class="card-text small text-muted mb-1">
+                        <i class="bi bi-hdd"></i> ${fileSize}
+                    </p>
+                    <p class="card-text small text-muted mb-0">
+                        <i class="bi bi-file-earmark"></i> ${fileType}
+                    </p>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer p-2 d-none file-actions">
+            <button class="btn btn-success btn-sm w-100" onclick="event.stopPropagation(); startPrintFile('${file.name}')">
+                <i class="bi bi-play-fill"></i> Start Print
+            </button>
+        </div>
+    `;
+
+    return colDiv;
+}
+
+// Select a print file
+function selectPrintFile(file, cardElement) {
+    // Clear previous selection
+    document.querySelectorAll('.file-card').forEach(card => {
+        card.classList.remove('border-success', 'bg-light');
+        card.querySelector('.file-actions')?.classList.add('d-none');
+    });
+
+    // Select new file
+    selectedPrintFile = file;
+    cardElement.classList.add('border-success', 'bg-light');
+    cardElement.querySelector('.file-actions')?.classList.remove('d-none');
+
+    // Update selected file info
+    updateSelectedFileInfo(file);
+}
+
+// Update selected file info display
+function updateSelectedFileInfo(file) {
+    const infoDiv = document.getElementById('selected-file-info');
+    const nameSpan = document.getElementById('selected-file-name');
+    const sizeSpan = document.getElementById('selected-file-size');
+    const typeSpan = document.getElementById('selected-file-type');
+
+    nameSpan.textContent = file.name;
+    sizeSpan.textContent = formatFileSize(file.size);
+    typeSpan.textContent = file.type || 'Unknown';
+
+    infoDiv.style.display = 'block';
+}
+
+// Clear file selection
+function clearFileSelection() {
+    selectedPrintFile = null;
+    document.querySelectorAll('.file-card').forEach(card => {
+        card.classList.remove('border-success', 'bg-light');
+        card.querySelector('.file-actions')?.classList.add('d-none');
+    });
+    document.getElementById('selected-file-info').style.display = 'none';
+}
+
+// Start printing selected file
+async function startSelectedPrint() {
+    if (!selectedPrintFile) {
+        showAlert('No file selected', 'warning');
+        return;
+    }
+
+    await startPrintFile(selectedPrintFile.name);
+}
+
+// Start printing a specific file
+async function startPrintFile(filename) {
+    if (!confirm(`Start printing "${filename}"?\n\nThis will begin the print job on the printer.`)) {
+        return;
+    }
+
+    const btn = document.getElementById('start-selected-print-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Starting...';
+    }
+
+    try {
+        const response = await fetch('/api/printer/start-print', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ filename: filename })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showAlert(`Print started: ${filename}`, 'success');
+            clearFileSelection();
+        } else {
+            showAlert(`Failed to start print: ${result.message}`, 'danger');
+        }
+    } catch (error) {
+        console.error('Error starting print:', error);
+        showAlert('Network error: Could not start print', 'danger');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-play-fill"></i> Start Print';
+        }
+    }
+}
+
+// Show upload modal (placeholder)
+function showUploadModal() {
+    showAlert('File upload functionality coming soon!', 'info');
+}
+
+// Helper functions
+function hideAllFileStates() {
+    document.getElementById('print-files-loading').style.display = 'none';
+    document.getElementById('print-files-empty').style.display = 'none';
+    document.getElementById('print-files-error').style.display = 'none';
+    document.getElementById('print-files-list').style.display = 'none';
+}
+
+function showFileError(message) {
+    hideAllFileStates();
+    const errorDiv = document.getElementById('print-files-error');
+    const errorMsg = document.getElementById('print-files-error-message');
+    errorMsg.textContent = message;
+    errorDiv.style.display = 'block';
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0 || !bytes) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// Initialize print files on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-refresh print files when page loads
+    if (document.getElementById('print-files-list')) {
+        setTimeout(refreshPrintFiles, 1000); // Delay to let page fully load
+    }
+});
