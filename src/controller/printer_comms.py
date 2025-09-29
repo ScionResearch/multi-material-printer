@@ -106,7 +106,7 @@ class PrinterCommunicator:
         # Try 3 times to get the data (matching original behavior)
         for attempt in range(3):
             try:
-                uart = UartWifi(self.printer_ip, self.printer_port, timeout=self.timeout)
+                uart = UartWifi(self.printer_ip, self.printer_port)
                 responses = uart.send_request(command)
                 return responses[0] if responses else None  # Return the primary response object
             except ConnectionException:

@@ -1,0 +1,23 @@
+{
+  "activity_log": [
+    {
+      "timestamp": "2025-09-28T15:36:53.524718",
+      "level": "INFO",
+      "message": "Shared status system initialized",
+      "component": "shared_status"
+    },
+    {
+      "timestamp": "2025-09-28T15:37:13.788578",
+      "level": "INFO",
+      "message": "SSH integration test completed",
+      "component": "ssh_test"
+    },
+    {
+      "timestamp": "2025-09-28T16:27:27.009193",
+      "level": "INFO",
+      "message": "Multi-material start requested via web app (command 2)",
+      "component": "web_app"
+    }
+  ],
+  "max_entries": 1000
+}

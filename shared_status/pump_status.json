@@ -1,0 +1,26 @@
+{
+  "pump_a": {
+    "status": "idle",
+    "last_operation": null,
+    "duration": 0
+  },
+  "pump_b": {
+    "status": "idle",
+    "last_operation": null,
+    "duration": 0
+  },
+  "pump_c": {
+    "status": "idle",
+    "last_operation": null,
+    "duration": 0
+  },
+  "drain_pump": {
+    "status": "idle",
+    "last_operation": null,
+    "duration": 0
+  },
+  "current_operation": "idle",
+  "operation_step": "",
+  "step_progress": 0,
+  "last_update": "2025-09-28T15:36:53.524693"
+}

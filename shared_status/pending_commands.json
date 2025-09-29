@@ -1,0 +1,24 @@
+{
+  "pending_commands": [
+    {
+      "id": 1,
+      "command": "test_command",
+      "parameters": {
+        "source": "ssh_test"
+      },
+      "timestamp": "2025-09-28T15:37:13.756810",
+      "status": "pending"
+    },
+    {
+      "id": 2,
+      "command": "start_multi_material",
+      "parameters": {
+        "recipe_path": "/home/pidlp/pidlp/multi-material-printer/config/recipe.txt"
+      },
+      "timestamp": "2025-09-28T16:27:26.994302",
+      "status": "pending"
+    }
+  ],
+  "last_command_id": 2,
+  "last_processed": "2025-09-28T15:36:53.524634"
+}
