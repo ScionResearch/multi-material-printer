@@ -417,45 +417,21 @@ class PrintManager:
             )
             self._status_queue.put_nowait(update)
 
-            # Send via WebSocket (preferred) or fall back to shared status files
+            # Send via WebSocket IPC system
             if self.websocket_client and self.websocket_client.is_connected():
                 self._send_websocket_status_update(tag, message, data, level)
             else:
-                self._update_shared_status(tag, message, data, level)
+                # WebSocket not available - log locally only
+                logger.debug(f"[{tag}] {message}" + (f" | Data: {data}" if data else ""))
 
         except queue.Full:
             logger.warning("Status queue full - dropping update")
 
     def _update_shared_status(self, tag: str, message: str, data: Optional[Dict[str, Any]] = None, level: str = "info"):
-        """Update shared status files for both Qt GUI and web app access."""
-        if shared_status is None:
-            return
-
-        try:
-            # Log activity
-            shared_status.log_activity(level, message, tag.lower())
-
-            # Update specific status based on tag
-            if tag == "PRINTER_STATUS" and data:
-                shared_status.update_printer_status(**data)
-            elif tag == "PUMP_STATUS" and data:
-                pump_name = data.get("pump_name")
-                if pump_name:
-                    pump_data = {k: v for k, v in data.items() if k != "pump_name"}
-                    shared_status.update_pump_status(pump_name, **pump_data)
-                else:
-                    shared_status.update_pump_status(**data)
-            elif tag == "MATERIAL_CHANGE" and data:
-                shared_status.update_recipe_progress(**data)
-            elif tag == "MONITOR" and data:
-                # General monitoring updates
-                if "current_layer" in data:
-                    shared_status.update_printer_status(**data)
-                if "recipe_active" in data:
-                    shared_status.update_recipe_progress(**data)
-
-        except Exception as e:
-            logger.warning(f"Failed to update shared status: {e}")
+        """Legacy method - now handled by WebSocket IPC system."""
+        # This method is now deprecated as status updates are handled
+        # directly via WebSocket in _send_status_update()
+        logger.debug(f"Legacy shared_status call for {tag}: {message}")
 
     def _handle_websocket_command(self, command_data: Dict[str, Any]):
         """Handle commands received via WebSocket IPC."""
@@ -466,8 +442,9 @@ class PrintManager:
 
             logger.info(f"Received WebSocket command: {command_type} ({command_id})")
 
-            # Process the command using existing handler
-            success = self._process_shared_command(command_type, parameters)
+            # Process the command using existing handler (adapt to expected format)
+            command_dict = {"command": command_type, "parameters": parameters}
+            success = self._process_shared_command(command_dict)
 
             # Send result back via WebSocket
             if self.websocket_client:
@@ -540,19 +517,17 @@ class PrintManager:
                     # Process any queued commands from WebSocket
                     command = self.websocket_client.get_next_command(timeout=0.1)
                     if command:
-                        success = self._process_shared_command(command['command_type'], command.get('parameters', {}))
+                        command_dict = {"command": command['command_type'], "parameters": command.get('parameters', {})}
+                        success = self._process_shared_command(command_dict)
                         self.websocket_client.mark_command_processed(
                             command['command_id'],
                             success=success,
                             result="Command executed" if success else "Command failed"
                         )
-                elif shared_status:
-                    # Fallback to file-based command processing
-                    pending_commands = shared_status.get_pending_commands()
-                    for command in pending_commands:
-                        if command["status"] == "pending":
-                            self._process_shared_command(command)
-                            shared_status.mark_command_processed(command["id"])
+                else:
+                    # No WebSocket connection available - log warning
+                    if loop_count % 60 == 0:  # Log every 5 minutes (60 * 5s intervals)
+                        logger.warning("No WebSocket connection available for receiving commands")
 
                 # Get printer status (suppress debug output)
                 status = self._get_printer_status()
@@ -916,6 +891,12 @@ class PrintManager:
                 self._calibrate_single_pump(pump_id)
             else:
                 self._send_status_update("CALIBRATION", "Invalid pump ID for calibration", level="error")
+        else:
+            self._send_status_update("COMMAND", f"Unknown command: {cmd_type}", level="warning")
+            return False
+
+        # Default return for successful command processing
+        return True
 
     def _execute_material_change_sequence(self, target_material: str, drain_time: int, fill_time: int, mix_time: int, settle_time: int) -> bool:
         """
