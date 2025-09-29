@@ -89,7 +89,7 @@ class WebSocketIPCClient:
                 self.sio = socketio.Client(
                     reconnection=self.auto_reconnect,
                     reconnection_delay=self.reconnect_delay,
-                    logger=False,  # Disable socketio internal logging
+                    logger=True,  # Enable socketio internal logging for debugging
                     engineio_logger=False
                 )
                 self._setup_event_handlers()

@@ -45,7 +45,7 @@ print("Using WebSocket-based IPC system (shared_status deprecated)")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'scion-mmu-controller-secret-key'
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
 
 # Global variables for application state
 current_status = {
