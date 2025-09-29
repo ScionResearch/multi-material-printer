@@ -90,14 +90,13 @@ class PrinterCommunicator:
         
     def _run_printer_command(self, command):
         """
-        Execute printer command via uart-wifi library directly.
-        Simplified efficient implementation without subprocess overhead.
+        Execute printer command via uart-wifi library and return structured response objects.
 
         Args:
             command (str): Command to send ('getstatus', 'gopause', etc.)
 
         Returns:
-            str: Response data or None if failed
+            Response object or None if failed
         """
         import time
 
@@ -107,35 +106,22 @@ class PrinterCommunicator:
         # Try 3 times to get the data (matching original behavior)
         for attempt in range(3):
             try:
-                uart = UartWifi(self.printer_ip, self.printer_port)
+                uart = UartWifi(self.printer_ip, self.printer_port, timeout=self.timeout)
                 responses = uart.send_request(command)
-
-                if responses:
-                    # Convert response objects to strings for consistency
-                    response_text = ""
-                    for response in responses:
-                        if hasattr(response, '__str__'):
-                            response_text += str(response) + "\n"
-                    return response_text.strip()
-                else:
-                    return ""
-
+                return responses[0] if responses else None  # Return the primary response object
             except ConnectionException:
                 time.sleep(1)
-                continue
             except Exception as e:
+                print(f"Error on command '{command}': {e}")
                 time.sleep(1)
-                continue
-
-        # All attempts failed
-        raise ConnectionException(f"Failed to send command '{command}' after 3 attempts.")
+        return None
     
     def get_status(self):
         """
         Get current printer status via uart-wifi.
-        
+
         Returns:
-            str: Status response with state, layer, progress info
+            MonoXStatus object with status information or None if failed
         """
         return self._run_printer_command('getstatus')
     
@@ -185,33 +171,18 @@ class PrinterCommunicator:
         Returns:
             list: Available filenames or empty list if error
         """
-        try:
-            # Use the correct command - getfileinfo works, getfiles doesn't
-            response = self._run_printer_command('getfileinfo')
-
-            if response and response.strip():
-                # Parse the response format: "1.pwmb: 16mm base - Part 1.pwmb"
-                files = []
-                for line in response.strip().split('\n'):
-                    line = line.strip()
-                    if line and ':' in line:
-                        # Split on first colon to separate internal name from display name
-                        parts = line.split(':', 1)
-                        if len(parts) == 2:
-                            internal_name = parts[0].strip()
-                            display_name = parts[1].strip()
-                            files.append({
-                                'name': display_name,
-                                'internal_name': internal_name,
-                                'size': 0,  # Size not provided by printer
-                                'type': 'CTB',
-                                'date': 'Unknown'
-                            })
-                return files
-
-        except Exception as e:
-            print(f"Error getting files: {e}")
-
+        file_list_obj = self._run_printer_command('getfile')  # Correct command is 'getfile'
+        if file_list_obj and hasattr(file_list_obj, 'files'):
+            files = []
+            for file_entry in file_list_obj.files:
+                files.append({
+                    'name': file_entry.external,
+                    'internal_name': file_entry.internal,
+                    'size': getattr(file_entry, 'size', 0),
+                    'type': getattr(file_entry, 'type', 'CTB'),
+                    'date': getattr(file_entry, 'date', 'Unknown')
+                })
+            return files
         return []
     
     def start_print(self, filename):

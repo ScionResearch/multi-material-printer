@@ -422,56 +422,47 @@ function runFullSequence() {
         return;
     }
 
-    const fromMaterial = 'A'; // This would come from current state
     const toMaterial = document.getElementById('fill-material').value;
+    const sequenceConfig = {
+        drain_time: parseInt(document.getElementById('drain-time').value),
+        fill_time: parseInt(document.getElementById('fill-time').value),
+        mix_time: parseInt(document.getElementById('mix-time').value),
+        settle_time: parseInt(document.getElementById('settle-time').value)
+    };
 
-    logProcess(`Starting full material change sequence: ${fromMaterial} → ${toMaterial}`, 'info');
+    logProcess(`Starting full material change sequence to ${toMaterial}`, 'info');
 
     currentSequence = {
-        steps: ['drain', 'fill', 'mix', 'settle'],
-        fromMaterial: fromMaterial,
         toMaterial: toMaterial,
         startTime: Date.now()
     };
 
-    sequenceStep = 0;
-    sequencePaused = false;
-
     updateSequenceProgress(0, 'Starting sequence...');
-    executeNextStep();
-}
 
-function executeNextStep() {
-    if (sequencePaused || !currentSequence) return;
-
-    if (sequenceStep >= currentSequence.steps.length) {
-        // Sequence complete
-        completeSequence();
-        return;
-    }
-
-    const step = currentSequence.steps[sequenceStep];
-    const stepConfig = getStepConfig(step);
-
-    logProcess(`Executing step ${sequenceStep + 1}/4: ${step.toUpperCase()}`, 'info');
-    updateSequenceProgress((sequenceStep / currentSequence.steps.length) * 100,
-                          `Step ${sequenceStep + 1}: ${step.toUpperCase()}`);
-
-    // Update current action display
-    document.getElementById('current-action').innerHTML =
-        `<span class="badge bg-primary">${step.toUpperCase()}</span>`;
-
-    // Execute the step
-    runSingleStep(step);
-
-    // Set timer for next step
-    stepTimer = setTimeout(() => {
-        sequenceStep++;
-        executeNextStep();
-    }, stepConfig.duration * 1000);
-
-    // Update countdown
-    updateStepCountdown(stepConfig.duration);
+    // Send request to backend to handle the entire sequence
+    fetch('/api/sequence/material-change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            target_material: toMaterial,
+            config: sequenceConfig
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            logProcess(`Material change sequence started: ${data.message}`, 'success');
+            // Sequence progress will be updated via SocketIO status updates
+        } else {
+            throw new Error(data.message || 'Failed to start sequence');
+        }
+    })
+    .catch(error => {
+        logProcess(`Failed to start sequence: ${error}`, 'error');
+        showAlert(`Failed to start sequence: ${error}`, 'danger');
+        currentSequence = null;
+        updateSequenceProgress(0, 'Failed');
+    });
 }
 
 function updateStepCountdown(duration) {
@@ -679,6 +670,28 @@ function logProcess(message, type = 'info') {
 function clearLog() {
     document.getElementById('process-log').innerHTML =
         '<div class="log-entry text-info">[Ready] Log cleared</div>';
+}
+
+// Override global status update handler for sequence progress
+if (typeof socket !== 'undefined') {
+    socket.on('status_update', function(data) {
+        // Update global status
+        if (window.ScionApp && window.ScionApp.updateGlobalStatus) {
+            window.ScionApp.updateGlobalStatus(data);
+        }
+
+        // Handle sequence-specific updates
+        if (data.sequence_progress && currentSequence) {
+            const progress = data.sequence_progress;
+            const percent = progress.total_steps > 0 ? (progress.current_step / progress.total_steps) * 100 : 0;
+
+            updateSequenceProgress(percent, progress.step_name || 'Processing...');
+
+            if (progress.current_step === progress.total_steps && progress.step_name === 'complete') {
+                completeSequence();
+            }
+        }
+    });
 }
 
 // Load custom timing on page load

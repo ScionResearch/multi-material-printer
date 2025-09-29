@@ -46,13 +46,14 @@ from typing import Dict, Optional, Any
 # Set up logger
 logger = logging.getLogger(__name__)
 
-# Import shared status system
+# Import WebSocket IPC system (replaces file-based shared_status)
 try:
-    from shared_status import get_shared_status
-    shared_status = get_shared_status()
+    from websocket_ipc import WebSocketIPCClient
+    WEBSOCKET_IPC_AVAILABLE = True
 except ImportError as e:
-    logger.warning(f"Could not import shared_status: {e}")
-    shared_status = None
+    logger.warning(f"Could not import websocket_ipc: {e}")
+    WebSocketIPCClient = None
+    WEBSOCKET_IPC_AVAILABLE = False
 
 # Import controller modules with robust error handling
 mmu_control = None
@@ -173,6 +174,21 @@ class PrintManager:
         # Research logging setup
         self._experiment_start_time = None
         self._material_change_count = 0
+
+        # WebSocket IPC client for real-time communication with web app
+        self.websocket_client = None
+        self._command_processing_thread = None
+        if WEBSOCKET_IPC_AVAILABLE:
+            try:
+                self.websocket_client = WebSocketIPCClient()
+                self.websocket_client.on_command_received = self._handle_websocket_command
+                self.websocket_client.on_connection_changed = self._handle_connection_change
+                logger.info("WebSocket IPC client initialized")
+            except Exception as e:
+                logger.error(f"Failed to initialize WebSocket IPC client: {e}")
+                self.websocket_client = None
+        else:
+            logger.warning("WebSocket IPC not available - falling back to file-based communication")
 
         logger.info(f"Multi-Material Printer Ready - IP: {self.printer_ip}")
 
@@ -390,7 +406,7 @@ class PrintManager:
             }
 
     def _send_status_update(self, tag: str, message: str, data: Optional[Dict[str, Any]] = None, level: str = "info"):
-        """Send status update to queue for GUI consumption and shared status files."""
+        """Send status update to queue for GUI consumption and WebSocket/shared status."""
         try:
             update = StatusUpdate(
                 timestamp=time.time(),
@@ -401,8 +417,11 @@ class PrintManager:
             )
             self._status_queue.put_nowait(update)
 
-            # Also update shared status files
-            self._update_shared_status(tag, message, data, level)
+            # Send via WebSocket (preferred) or fall back to shared status files
+            if self.websocket_client and self.websocket_client.is_connected():
+                self._send_websocket_status_update(tag, message, data, level)
+            else:
+                self._update_shared_status(tag, message, data, level)
 
         except queue.Full:
             logger.warning("Status queue full - dropping update")
@@ -438,6 +457,57 @@ class PrintManager:
         except Exception as e:
             logger.warning(f"Failed to update shared status: {e}")
 
+    def _handle_websocket_command(self, command_data: Dict[str, Any]):
+        """Handle commands received via WebSocket IPC."""
+        try:
+            command_type = command_data.get('command_type')
+            command_id = command_data.get('command_id')
+            parameters = command_data.get('parameters', {})
+
+            logger.info(f"Received WebSocket command: {command_type} ({command_id})")
+
+            # Process the command using existing handler
+            success = self._process_shared_command(command_type, parameters)
+
+            # Send result back via WebSocket
+            if self.websocket_client:
+                self.websocket_client.mark_command_processed(
+                    command_id,
+                    success=success,
+                    result="Command executed successfully" if success else "Command failed"
+                )
+
+        except Exception as e:
+            logger.error(f"Error handling WebSocket command: {e}")
+            if self.websocket_client and 'command_id' in command_data:
+                self.websocket_client.mark_command_processed(
+                    command_data['command_id'],
+                    success=False,
+                    result=f"Error: {e}"
+                )
+
+    def _handle_connection_change(self, connected: bool):
+        """Handle WebSocket connection status changes."""
+        if connected:
+            logger.info("Connected to web application via WebSocket")
+            self._send_status_update("WEBSOCKET", "Connected to web application")
+        else:
+            logger.warning("Disconnected from web application")
+            self._send_status_update("WEBSOCKET", "Disconnected from web application", level="warning")
+
+    def _send_websocket_status_update(self, tag: str, message: str, data: Optional[Dict[str, Any]] = None, level: str = "info"):
+        """Send status update via WebSocket IPC (replaces file-based communication)."""
+        if self.websocket_client and self.websocket_client.is_connected():
+            try:
+                self.websocket_client.send_status_update(
+                    component=tag,
+                    status=message,
+                    data=data,
+                    level=level
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send WebSocket status update: {e}")
+
     def _monitoring_loop(self):
         """
         Main monitoring loop - research-focused logging only.
@@ -446,6 +516,13 @@ class PrintManager:
             with self._state_lock:
                 self.state = PrintManagerState.MONITORING
                 self._experiment_start_time = time.time()
+
+            # Start WebSocket connection if available
+            if self.websocket_client:
+                if self.websocket_client.connect():
+                    logger.info("WebSocket connection established")
+                else:
+                    logger.warning("Failed to establish WebSocket connection - falling back to file-based communication")
 
             # Clean startup message
             self._send_status_update("EXPERIMENT", f"Multi-material experiment started",
@@ -457,8 +534,20 @@ class PrintManager:
             while not self._stop_event.is_set():
                 loop_count += 1
 
-                # Check for commands from shared status system
-                if shared_status:
+                # Handle commands via WebSocket (preferred) or file-based system (fallback)
+                if self.websocket_client and self.websocket_client.is_connected():
+                    # WebSocket commands are handled automatically via callbacks
+                    # Process any queued commands from WebSocket
+                    command = self.websocket_client.get_next_command(timeout=0.1)
+                    if command:
+                        success = self._process_shared_command(command['command_type'], command.get('parameters', {}))
+                        self.websocket_client.mark_command_processed(
+                            command['command_id'],
+                            success=success,
+                            result="Command executed" if success else "Command failed"
+                        )
+                elif shared_status:
+                    # Fallback to file-based command processing
                     pending_commands = shared_status.get_pending_commands()
                     for command in pending_commands:
                         if command["status"] == "pending":
@@ -555,6 +644,14 @@ class PrintManager:
                 self.state = PrintManagerState.ERROR
 
         finally:
+            # Disconnect WebSocket client
+            if self.websocket_client:
+                try:
+                    self.websocket_client.disconnect()
+                    logger.info("WebSocket client disconnected")
+                except Exception as e:
+                    logger.warning(f"Error disconnecting WebSocket client: {e}")
+
             with self._state_lock:
                 if self.state != PrintManagerState.ERROR:
                     self.state = PrintManagerState.IDLE
@@ -570,72 +667,21 @@ class PrintManager:
 
     def _extract_current_layer(self, status) -> Optional[int]:
         """
-        Extract current layer from status response.
+        Extract current layer from MonoXStatus object.
 
         Args:
-            status: MonoXStatus object or string
+            status: MonoXStatus object from uart-wifi library
 
         Returns:
             Layer number or None if parsing fails
         """
-        try:
-            # Handle MonoXStatus object directly
-            if hasattr(status, 'current_layer'):
-                layer_num = status.current_layer
-
-                # Convert to int if it's a string
-                if isinstance(layer_num, str) and layer_num.isdigit():
-                    layer_num = int(layer_num)
-                elif isinstance(layer_num, (int, float)):
-                    layer_num = int(layer_num)
-                else:
-                    return None
-
-                # Layer 0 means print hasn't started yet
-                if layer_num <= 0:
-                    return None
-
-                return layer_num
-
-            # If no current_layer attribute, check other attributes
-            if hasattr(status, 'percent_complete') and hasattr(status, 'status'):
-                # If just started printing, assume layer 1
-                if status.status in ['print', 'printing'] and str(getattr(status, 'percent_complete', '0')) == '0':
-                    return 1
-
-            # Fallback to string parsing
-            status_str = str(status)
-
-            import re
-            # Try multiple patterns to find current layer
-            patterns = [
-                r'current_layer:\s*(\d+)',
-                r'current_lay[er]*:\s*(\d+)',
-                r'layer:\s*(\d+)',
-                r'current_layer\s*=\s*(\d+)',
-                r'current_layer":\s*(\d+)',
-            ]
-
-            for pattern in patterns:
-                match = re.search(pattern, status_str, re.IGNORECASE)
-                if match:
-                    layer_num = int(match.group(1))
-                    if layer_num <= 0:
-                        return None
-                    return layer_num
-
-            # If no pattern matches, try to find any number after "current" or "layer"
-            current_match = re.search(r'current.*?(\d+)', status_str, re.IGNORECASE)
-            if current_match:
-                layer_num = int(current_match.group(1))
-                if layer_num <= 0:
-                    return None
-                return layer_num
-
-            return None
-
-        except Exception as e:
-            return None
+        if status and hasattr(status, 'current_layer'):
+            try:
+                layer_num = int(status.current_layer)
+                return layer_num if layer_num > 0 else None
+            except (ValueError, TypeError):
+                return None
+        return None
 
     def _handle_material_change(self, material: str) -> bool:
         """
@@ -804,13 +850,341 @@ class PrintManager:
             self._stop_event.set()
             self._send_status_update("COMMAND", "Emergency stop activated", level="warning")
         elif cmd_type == "pump_control":
-            # Handle manual pump control
             if mmu_control:
                 motor = params.get("motor")
                 direction = params.get("direction")
                 duration = params.get("duration")
-                success = mmu_control.run_pump_manual(motor, direction, duration)
-                self._send_status_update("PUMP", f"Manual pump {motor} {direction} {duration}s: {'success' if success else 'failed'}")
+
+                if motor and direction and duration is not None:
+                    self._send_status_update("PUMP", f"Executing manual pump command: {motor} {direction} for {duration}s")
+                    success = mmu_control.run_pump_by_id(motor, direction, duration)
+                    self._send_status_update("PUMP", f"Manual pump {motor} {direction} {duration}s: {'success' if success else 'failed'}")
+                else:
+                    self._send_status_update("PUMP", "Invalid manual pump command parameters", level="error")
+        elif cmd_type == "run_material_change":
+            # Handle manual material change sequence
+            target_material = params.get("target_material")
+            if target_material and mmu_control:
+                self._send_status_update("SEQUENCE", f"Starting material change sequence to {target_material}")
+
+                # Execute complete material change sequence with custom timing
+                drain_time = params.get("drain_time", 30)
+                fill_time = params.get("fill_time", 25)
+                mix_time = params.get("mix_time", 10)
+                settle_time = params.get("settle_time", 5)
+
+                success = self._execute_material_change_sequence(target_material, drain_time, fill_time, mix_time, settle_time)
+
+                if success:
+                    self._send_status_update("SEQUENCE", f"Material change sequence to {target_material} completed successfully")
+                else:
+                    self._send_status_update("SEQUENCE", f"Material change sequence to {target_material} failed", level="error")
+            else:
+                self._send_status_update("SEQUENCE", "Invalid material change parameters or MMU control not available", level="error")
+        elif cmd_type == "test_i2c":
+            # Test I2C communication with motor controllers
+            self._send_status_update("DIAGNOSTICS", "Starting I2C communication test...")
+            success = self._test_i2c_communication()
+            result_msg = "I2C test completed successfully" if success else "I2C test failed"
+            level = "info" if success else "error"
+            self._send_status_update("DIAGNOSTICS", result_msg, level=level)
+        elif cmd_type == "test_gpio":
+            # Test GPIO pin accessibility
+            self._send_status_update("DIAGNOSTICS", "Starting GPIO pin test...")
+            success = self._test_gpio_pins()
+            result_msg = "GPIO test completed successfully" if success else "GPIO test failed"
+            level = "info" if success else "error"
+            self._send_status_update("DIAGNOSTICS", result_msg, level=level)
+        elif cmd_type == "test_pump_motors":
+            # Test all pump motor connectivity
+            self._send_status_update("DIAGNOSTICS", "Starting pump motor connectivity test...")
+            results = self._test_pump_motors()
+            self._send_status_update("DIAGNOSTICS", f"Pump motor test completed. Results: {results}")
+        elif cmd_type == "run_full_diagnostics":
+            # Run comprehensive system diagnostics
+            self._send_status_update("DIAGNOSTICS", "Starting full system diagnostics...")
+            self._run_full_diagnostics()
+        elif cmd_type == "calibrate_pumps":
+            # Start pump calibration wizard
+            self._send_status_update("CALIBRATION", "Starting pump calibration wizard...")
+            self._calibrate_all_pumps()
+        elif cmd_type == "calibrate_single_pump":
+            # Calibrate specific pump
+            pump_id = params.get("pump_id")
+            if pump_id:
+                self._send_status_update("CALIBRATION", f"Starting calibration for pump {pump_id}...")
+                self._calibrate_single_pump(pump_id)
+            else:
+                self._send_status_update("CALIBRATION", "Invalid pump ID for calibration", level="error")
+
+    def _execute_material_change_sequence(self, target_material: str, drain_time: int, fill_time: int, mix_time: int, settle_time: int) -> bool:
+        """
+        Execute complete material change sequence with custom timing.
+
+        Args:
+            target_material: Target material (A, B, C, D)
+            drain_time: Drain duration in seconds
+            fill_time: Fill duration in seconds
+            mix_time: Mix duration in seconds
+            settle_time: Settle duration in seconds
+
+        Returns:
+            True if successful
+        """
+        try:
+            total_steps = 4
+            current_step = 0
+
+            # Step 1: Drain current material
+            current_step += 1
+            self._send_status_update("SEQUENCE", f"Step {current_step}/{total_steps}: Draining current material for {drain_time}s",
+                                   {"current_step": current_step, "total_steps": total_steps, "step_name": "drain"})
+
+            success = mmu_control.run_pump_by_id('D', 'R', drain_time)  # Use drain pump in reverse
+            if not success:
+                self._send_status_update("SEQUENCE", "Drain step failed", level="error")
+                return False
+
+            # Step 2: Fill with new material
+            current_step += 1
+            self._send_status_update("SEQUENCE", f"Step {current_step}/{total_steps}: Filling with material {target_material} for {fill_time}s",
+                                   {"current_step": current_step, "total_steps": total_steps, "step_name": "fill"})
+
+            success = mmu_control.run_pump_by_id(target_material, 'F', fill_time)
+            if not success:
+                self._send_status_update("SEQUENCE", "Fill step failed", level="error")
+                return False
+
+            # Step 3: Mix materials (if mix time > 0)
+            if mix_time > 0:
+                current_step += 1
+                self._send_status_update("SEQUENCE", f"Step {current_step}/{total_steps}: Mixing for {mix_time}s",
+                                       {"current_step": current_step, "total_steps": total_steps, "step_name": "mix"})
+
+                # Implement mixing logic - alternate forward/reverse
+                mix_cycles = max(1, mix_time // 2)  # Each cycle is 2 seconds
+                for cycle in range(mix_cycles):
+                    # Forward for 1 second
+                    mmu_control.run_pump_by_id(target_material, 'F', 1)
+                    time.sleep(0.5)  # Small gap between operations
+                    # Reverse for 1 second
+                    mmu_control.run_pump_by_id(target_material, 'R', 1)
+                    if cycle < mix_cycles - 1:  # Don't sleep after last cycle
+                        time.sleep(0.5)
+
+            # Step 4: Settle (wait)
+            current_step += 1
+            self._send_status_update("SEQUENCE", f"Step {current_step}/{total_steps}: Settling for {settle_time}s",
+                                   {"current_step": current_step, "total_steps": total_steps, "step_name": "settle"})
+
+            time.sleep(settle_time)
+
+            self._send_status_update("SEQUENCE", "Material change sequence completed successfully",
+                                   {"current_step": total_steps, "total_steps": total_steps, "step_name": "complete"})
+            return True
+
+        except Exception as e:
+            self._send_status_update("SEQUENCE", f"Material change sequence failed: {e}", level="error")
+            return False
+
+    def _test_i2c_communication(self) -> bool:
+        """Test I2C communication with motor controllers"""
+        try:
+            # Import I2C testing modules
+            try:
+                import board
+                import busio
+                self._send_status_update("DIAGNOSTICS", "I2C modules imported successfully")
+            except ImportError as e:
+                self._send_status_update("DIAGNOSTICS", f"I2C module import failed: {e}", level="error")
+                return False
+
+            # Test I2C bus initialization
+            try:
+                i2c = busio.I2C(board.SCL, board.SDA)
+                self._send_status_update("DIAGNOSTICS", "I2C bus initialized successfully")
+
+                # Scan for devices
+                while not i2c.try_lock():
+                    pass
+                devices = i2c.scan()
+                i2c.unlock()
+
+                if devices:
+                    device_addrs = [hex(addr) for addr in devices]
+                    self._send_status_update("DIAGNOSTICS", f"Found I2C devices at addresses: {', '.join(device_addrs)}")
+                    return True
+                else:
+                    self._send_status_update("DIAGNOSTICS", "No I2C devices found", level="warning")
+                    return False
+
+            except Exception as e:
+                self._send_status_update("DIAGNOSTICS", f"I2C bus test failed: {e}", level="error")
+                return False
+
+        except Exception as e:
+            self._send_status_update("DIAGNOSTICS", f"I2C test failed: {e}", level="error")
+            return False
+
+    def _test_gpio_pins(self) -> bool:
+        """Test GPIO pin accessibility"""
+        try:
+            # Get pump configuration to test configured GPIO pins
+            config_path = self._find_config_path() / 'pump_profiles.json'
+            if not config_path.exists():
+                self._send_status_update("DIAGNOSTICS", "Pump configuration file not found", level="error")
+                return False
+
+            import json
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+
+            gpio_pins = []
+            for pump_id, pump_config in config.get('pumps', {}).items():
+                gpio_pin = pump_config.get('gpio_pin')
+                if gpio_pin:
+                    gpio_pins.append(gpio_pin)
+
+            if not gpio_pins:
+                self._send_status_update("DIAGNOSTICS", "No GPIO pins configured in pump profiles", level="warning")
+                return False
+
+            # Test GPIO access
+            try:
+                import RPi.GPIO as GPIO
+                GPIO.setmode(GPIO.BCM)
+
+                failed_pins = []
+                for pin in gpio_pins:
+                    try:
+                        GPIO.setup(pin, GPIO.OUT)
+                        self._send_status_update("DIAGNOSTICS", f"GPIO pin {pin} setup successful")
+                    except Exception as e:
+                        failed_pins.append(pin)
+                        self._send_status_update("DIAGNOSTICS", f"GPIO pin {pin} setup failed: {e}", level="error")
+
+                GPIO.cleanup()
+
+                if failed_pins:
+                    self._send_status_update("DIAGNOSTICS", f"GPIO test failed for pins: {failed_pins}", level="error")
+                    return False
+                else:
+                    self._send_status_update("DIAGNOSTICS", "All configured GPIO pins accessible")
+                    return True
+
+            except ImportError:
+                self._send_status_update("DIAGNOSTICS", "RPi.GPIO module not available", level="error")
+                return False
+
+        except Exception as e:
+            self._send_status_update("DIAGNOSTICS", f"GPIO test failed: {e}", level="error")
+            return False
+
+    def _test_pump_motors(self) -> dict:
+        """Test all pump motor connectivity"""
+        results = {}
+        try:
+            if not mmu_control:
+                self._send_status_update("DIAGNOSTICS", "MMU control not available", level="error")
+                return {"error": "MMU control not available"}
+
+            # Test each pump with a short movement
+            pumps = ['A', 'B', 'C', 'D']
+            for pump in pumps:
+                try:
+                    self._send_status_update("DIAGNOSTICS", f"Testing pump {pump}...")
+                    success = mmu_control.run_pump_by_id(pump, 'F', 1)  # 1 second forward
+                    results[pump] = "OK" if success else "FAILED"
+                    self._send_status_update("DIAGNOSTICS", f"Pump {pump}: {'OK' if success else 'FAILED'}")
+                except Exception as e:
+                    results[pump] = f"ERROR: {e}"
+                    self._send_status_update("DIAGNOSTICS", f"Pump {pump} error: {e}", level="error")
+
+        except Exception as e:
+            self._send_status_update("DIAGNOSTICS", f"Pump motor test failed: {e}", level="error")
+            results["error"] = str(e)
+
+        return results
+
+    def _run_full_diagnostics(self):
+        """Run comprehensive system diagnostics"""
+        try:
+            # Test I2C
+            self._send_status_update("DIAGNOSTICS", "=== I2C Communication Test ===")
+            i2c_ok = self._test_i2c_communication()
+
+            # Test GPIO
+            self._send_status_update("DIAGNOSTICS", "=== GPIO Pin Test ===")
+            gpio_ok = self._test_gpio_pins()
+
+            # Test pump motors
+            self._send_status_update("DIAGNOSTICS", "=== Pump Motor Test ===")
+            pump_results = self._test_pump_motors()
+
+            # Test printer connectivity
+            self._send_status_update("DIAGNOSTICS", "=== Printer Connectivity Test ===")
+            printer_ok = False
+            if self.printer_comm:
+                try:
+                    status = self.printer_comm.get_status()
+                    printer_ok = status is not None
+                    self._send_status_update("DIAGNOSTICS", f"Printer connection: {'OK' if printer_ok else 'FAILED'}")
+                except Exception as e:
+                    self._send_status_update("DIAGNOSTICS", f"Printer test failed: {e}", level="error")
+            else:
+                self._send_status_update("DIAGNOSTICS", "Printer communication not initialized", level="warning")
+
+            # Summary
+            self._send_status_update("DIAGNOSTICS", "=== Diagnostics Summary ===")
+            self._send_status_update("DIAGNOSTICS", f"I2C Communication: {'PASS' if i2c_ok else 'FAIL'}")
+            self._send_status_update("DIAGNOSTICS", f"GPIO Pins: {'PASS' if gpio_ok else 'FAIL'}")
+            self._send_status_update("DIAGNOSTICS", f"Printer Connection: {'PASS' if printer_ok else 'FAIL'}")
+            self._send_status_update("DIAGNOSTICS", f"Pump Motors: {pump_results}")
+
+        except Exception as e:
+            self._send_status_update("DIAGNOSTICS", f"Full diagnostics failed: {e}", level="error")
+
+    def _calibrate_all_pumps(self):
+        """Start pump calibration wizard for all pumps"""
+        try:
+            pumps = ['A', 'B', 'C', 'D']
+            self._send_status_update("CALIBRATION", "Starting calibration for all pumps...")
+
+            for pump in pumps:
+                self._send_status_update("CALIBRATION", f"Calibrating pump {pump}...")
+                self._calibrate_single_pump(pump)
+
+            self._send_status_update("CALIBRATION", "All pump calibration completed")
+
+        except Exception as e:
+            self._send_status_update("CALIBRATION", f"Pump calibration failed: {e}", level="error")
+
+    def _calibrate_single_pump(self, pump_id: str):
+        """Calibrate a specific pump"""
+        try:
+            if not mmu_control:
+                self._send_status_update("CALIBRATION", "MMU control not available", level="error")
+                return
+
+            self._send_status_update("CALIBRATION", f"Starting calibration sequence for pump {pump_id}")
+
+            # Run calibration sequence: multiple short runs to measure flow
+            test_durations = [5, 10, 15]  # Test runs of different durations
+            for duration in test_durations:
+                self._send_status_update("CALIBRATION", f"Pump {pump_id}: Running {duration}s test...")
+                success = mmu_control.run_pump_by_id(pump_id, 'F', duration)
+                if success:
+                    self._send_status_update("CALIBRATION", f"Pump {pump_id}: {duration}s test completed")
+                else:
+                    self._send_status_update("CALIBRATION", f"Pump {pump_id}: {duration}s test failed", level="error")
+
+                # Wait between tests
+                time.sleep(2)
+
+            self._send_status_update("CALIBRATION", f"Calibration for pump {pump_id} completed. Please measure dispensed volumes and update pump_profiles.json")
+
+        except Exception as e:
+            self._send_status_update("CALIBRATION", f"Calibration for pump {pump_id} failed: {e}", level="error")
 
 
 def main():

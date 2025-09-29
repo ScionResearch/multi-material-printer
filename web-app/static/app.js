@@ -322,40 +322,7 @@ function enableDebugMode() {
     showAlert('Debug mode enabled - check console for detailed logs', 'info');
 }
 
-// Quick Action Functions
-function startMultiMaterial() {
-    if (confirm('Start multi-material printing with the current recipe?')) {
-        const btn = document.getElementById('start-print-btn');
-        if (btn) {
-            btn.disabled = true;
-            btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Starting...';
-        }
-
-        fetch('/api/start_multimaterial', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showAlert('Multi-material printing started successfully!', 'success');
-            } else {
-                showAlert(`Failed to start: ${data.message}`, 'danger');
-            }
-        })
-        .catch(error => {
-            showAlert(`Error: ${error.message}`, 'danger');
-        })
-        .finally(() => {
-            if (btn) {
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-play"></i> Start Multi-Material';
-            }
-        });
-    }
-}
+// Quick Action Functions (see Dashboard Quick Actions section for updated implementations)
 
 function quickPumpTest() {
     if (confirm('Run a quick test of all pumps? This will run each pump briefly.')) {

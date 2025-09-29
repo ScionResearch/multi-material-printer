@@ -361,14 +361,54 @@ function testAllPumps() {
     }, 5000);
 }
 
-function calibratePumps() {
-    showAlert('Starting pump calibration wizard...', 'info');
-    // Implementation would open calibration modal or sequence
+async function calibratePumps() {
+    try {
+        if (!confirm('Start pump calibration for all pumps? This will run test sequences.')) {
+            return;
+        }
+
+        showAlert('Starting pump calibration wizard...', 'info');
+
+        const response = await fetch('/api/calibration/pumps', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showAlert('Pump calibration started. Check status for progress.', 'success');
+        } else {
+            throw new Error(result.message || 'Failed to start pump calibration');
+        }
+    } catch (error) {
+        console.error('Error starting pump calibration:', error);
+        showAlert(`Error: ${error.message}`, 'danger');
+    }
 }
 
-function calibrateSinglePump(pumpId) {
-    showAlert(`Starting calibration for ${pumpId}...`, 'info');
-    // Implementation would open calibration dialog for specific pump
+async function calibrateSinglePump(pumpId) {
+    try {
+        if (!confirm(`Start calibration for pump ${pumpId}? This will run test sequences.`)) {
+            return;
+        }
+
+        showAlert(`Starting calibration for ${pumpId}...`, 'info');
+
+        const response = await fetch(`/api/calibration/pump/${pumpId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showAlert(`Calibration started for pump ${pumpId}. Check status for progress.`, 'success');
+        } else {
+            throw new Error(result.message || `Failed to start calibration for pump ${pumpId}`);
+        }
+    } catch (error) {
+        console.error(`Error starting calibration for pump ${pumpId}:`, error);
+        showAlert(`Error: ${error.message}`, 'danger');
+    }
 }
 
 function exportPumpConfig() {
@@ -382,61 +422,92 @@ function exportPumpConfig() {
 }
 
 // Diagnostic Functions
-function testI2C() {
-    showAlert('Testing I2C communication...', 'info');
-    setTimeout(() => {
-        document.getElementById('diagnostic-results').innerHTML = `
-            <div class="alert alert-success">
-                <strong>I2C Test:</strong> All devices responding correctly
-            </div>
-        `;
-    }, 2000);
+async function testI2C() {
+    try {
+        showAlert('Testing I2C communication...', 'info');
+
+        const response = await fetch('/api/diagnostics/i2c', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showAlert('I2C test started. Check status for results.', 'success');
+        } else {
+            throw new Error(result.message || 'Failed to start I2C test');
+        }
+    } catch (error) {
+        console.error('Error starting I2C test:', error);
+        showAlert(`Error: ${error.message}`, 'danger');
+    }
 }
 
-function testGPIO() {
-    showAlert('Testing GPIO pins...', 'info');
-    setTimeout(() => {
-        document.getElementById('diagnostic-results').innerHTML = `
-            <div class="alert alert-success">
-                <strong>GPIO Test:</strong> All configured pins accessible
-            </div>
-        `;
-    }, 2000);
+async function testGPIO() {
+    try {
+        showAlert('Testing GPIO pins...', 'info');
+
+        const response = await fetch('/api/diagnostics/gpio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showAlert('GPIO test started. Check status for results.', 'success');
+        } else {
+            throw new Error(result.message || 'Failed to start GPIO test');
+        }
+    } catch (error) {
+        console.error('Error starting GPIO test:', error);
+        showAlert(`Error: ${error.message}`, 'danger');
+    }
 }
 
-function testPumpMotors() {
-    showAlert('Testing pump motors...', 'info');
-    setTimeout(() => {
-        document.getElementById('diagnostic-results').innerHTML = `
-            <div class="alert alert-warning">
-                <strong>Motor Test:</strong> 3/4 pumps responding. Check Pump C connection.
-            </div>
-        `;
-    }, 3000);
+async function testPumpMotors() {
+    try {
+        showAlert('Testing pump motors...', 'info');
+
+        const response = await fetch('/api/diagnostics/pumps', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showAlert('Pump motor test started. Check status for results.', 'success');
+        } else {
+            throw new Error(result.message || 'Failed to start pump motor test');
+        }
+    } catch (error) {
+        console.error('Error starting pump motor test:', error);
+        showAlert(`Error: ${error.message}`, 'danger');
+    }
 }
 
 function testNetworkConnectivity() {
     testConnection();
 }
 
-function runFullDiagnostics() {
-    showAlert('Running full system diagnostics...', 'info');
-    setTimeout(() => {
-        document.getElementById('diagnostic-results').innerHTML = `
-            <div class="alert alert-success">
-                <strong>System Diagnostics:</strong> All systems operational
-            </div>
-            <div class="mt-2">
-                <small class="text-muted">
-                    ✓ I2C Communication<br>
-                    ✓ GPIO Configuration<br>
-                    ⚠ Pump C Motor (see details)<br>
-                    ✓ Network Connectivity<br>
-                    ✓ File System Access
-                </small>
-            </div>
-        `;
-    }, 5000);
+async function runFullDiagnostics() {
+    try {
+        showAlert('Running full system diagnostics...', 'info');
+
+        const response = await fetch('/api/diagnostics/full', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showAlert('Full diagnostics started. Check status for detailed results.', 'success');
+        } else {
+            throw new Error(result.message || 'Failed to start full diagnostics');
+        }
+    } catch (error) {
+        console.error('Error starting full diagnostics:', error);
+        showAlert(`Error: ${error.message}`, 'danger');
+    }
 }
 
 function generateDiagnosticReport() {
