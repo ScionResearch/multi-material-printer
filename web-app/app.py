@@ -1087,7 +1087,7 @@ if __name__ == '__main__':
 
     try:
         # Run the Flask application
-        socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+        socketio.run(app, host='0.0.0.0', port=5000, debug=False)  # Debug mode disabled to fix event handler registration
     except KeyboardInterrupt:
         print("\nShutting down...")
     finally:
