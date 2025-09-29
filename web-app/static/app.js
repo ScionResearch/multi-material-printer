@@ -837,6 +837,7 @@ function createFileCard(file) {
         </div>
     `;
 
+    colDiv.appendChild(cardDiv);
     return colDiv;
 }
 
