@@ -48,12 +48,16 @@ logger = logging.getLogger(__name__)
 
 # Import WebSocket IPC system (replaces file-based shared_status)
 try:
-    from websocket_ipc import WebSocketIPCClient
+    from .websocket_ipc import WebSocketIPCClient
     WEBSOCKET_IPC_AVAILABLE = True
 except ImportError as e:
-    logger.warning(f"Could not import websocket_ipc: {e}")
-    WebSocketIPCClient = None
-    WEBSOCKET_IPC_AVAILABLE = False
+    try:
+        from controller.websocket_ipc import WebSocketIPCClient
+        WEBSOCKET_IPC_AVAILABLE = True
+    except ImportError as e2:
+        logger.warning(f"Could not import websocket_ipc: {e} | {e2}")
+        WebSocketIPCClient = None
+        WEBSOCKET_IPC_AVAILABLE = False
 
 # Import controller modules with robust error handling
 mmu_control = None
