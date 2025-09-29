@@ -673,7 +673,17 @@ def api_test_connection():
         try:
             status = communicator.get_status()
             result = status is not None
-            connection_details = f"Status: {getattr(status, 'status', 'Unknown')}" if status else "No response"
+
+            # Parse the status string (e.g., "status: stop")
+            if status and isinstance(status, str):
+                # Extract status from string like "status: stop"
+                if ':' in status:
+                    status_value = status.split(':', 1)[1].strip()
+                else:
+                    status_value = status.strip()
+                connection_details = f"Printer status: {status_value}"
+            else:
+                connection_details = f"Raw response: {status}" if status else "No response"
         except Exception as conn_err:
             result = False
             connection_details = str(conn_err)
