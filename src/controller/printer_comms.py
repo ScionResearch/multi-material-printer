@@ -189,13 +189,63 @@ class PrinterCommunicator:
     def get_files(self):
         """
         Get list of printable files on printer.
-        
+
         Returns:
             list: Available filenames or empty list if error
         """
-        response = self._run_printer_command('getfiles')
-        if response:
-            return response.split('\n')
+        try:
+            # Use the correct command - getfileinfo works, getfiles doesn't
+            response = self._run_printer_command('getfileinfo')
+
+            # Handle case where response is captured but _run_printer_command returns empty
+            # We need to call the uart command directly and capture output differently
+            if not response:
+                # Direct call to get the file info
+                import io
+                import contextlib
+
+                uart = UartWifi(self.printer_ip, self.printer_port)
+                responses = uart.send_request('getfileinfo')
+
+                output_lines = []
+                if responses is not None:
+                    for response in responses:
+                        if hasattr(response, 'print'):
+                            # Capture stdout from response.print()
+                            f = io.StringIO()
+                            with contextlib.redirect_stdout(f):
+                                response.print()
+                            captured = f.getvalue().strip()
+                            if captured:
+                                output_lines.append(captured)
+                        elif response is not None:
+                            output_lines.append(str(response))
+
+                response = '\n'.join(output_lines)
+
+            if response and response.strip():
+                # Parse the response format: "1.pwmb: 16mm base - Part 1.pwmb"
+                files = []
+                for line in response.strip().split('\n'):
+                    line = line.strip()
+                    if line and ':' in line:
+                        # Split on first colon to separate internal name from display name
+                        parts = line.split(':', 1)
+                        if len(parts) == 2:
+                            internal_name = parts[0].strip()
+                            display_name = parts[1].strip()
+                            files.append({
+                                'name': display_name,
+                                'internal_name': internal_name,
+                                'size': 0,  # Size not provided by printer
+                                'type': 'CTB',
+                                'date': 'Unknown'
+                            })
+                return files
+
+        except Exception as e:
+            print(f"Error getting files: {e}")
+
         return []
     
     def start_print(self, filename):
