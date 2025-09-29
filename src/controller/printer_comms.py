@@ -100,38 +100,58 @@ class PrinterCommunicator:
             str: Response data or error message
         """
         import time
-        from typing import Iterable
+        import subprocess
+        import sys
+        import os
 
         # Try 3 times to get the data (matching newmonox.py behavior)
         for attempt in range(3):
             try:
-                uart = UartWifi(self.printer_ip, self.printer_port)
-                responses = uart.send_request(command)
+                # Use subprocess approach like Qt GUI does to capture ALL stdout
+                # This captures both the uart-wifi library prints AND any return values
+                script_dir = os.path.dirname(os.path.abspath(__file__))
+                python_cmd = [
+                    sys.executable, '-c',
+                    f"""
+import sys
+sys.path.append('{script_dir}')
+try:
+    from uart_wifi.communication import UartWifi
+    from uart_wifi.errors import ConnectionException
+    from uart_wifi.response import MonoXResponseType
 
-                # Process responses like newmonox.py does
-                import io
-                import contextlib
+    uart = UartWifi('{self.printer_ip}', {self.printer_port})
+    responses = uart.send_request('{command}')
 
-                output_lines = []
-                if responses is not None and isinstance(responses, Iterable):
-                    for response in responses:
-                        if isinstance(response, MonoXResponseType):
-                            if response is not None and str(response).strip():
-                                # Capture the output from response.print()
-                                f = io.StringIO()
-                                with contextlib.redirect_stdout(f):
-                                    response.print()
-                                output_lines.append(f.getvalue().strip())
-                        elif response is not None and str(response).strip():
-                            output_lines.append(str(response))
-                        else:
-                            output_lines.append(str(response))
+    # Process responses and let uart-wifi print to stdout naturally
+    if responses is not None:
+        for response in responses:
+            if hasattr(response, 'print'):
+                response.print()
+            elif response is not None:
+                print(str(response))
+
+except Exception as e:
+    print(f"Error: {{e}}")
+"""
+                ]
+
+                result = subprocess.run(
+                    python_cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+
+                if result.returncode == 0:
+                    # Return the captured stdout which includes uart-wifi prints
+                    return result.stdout.strip()
                 else:
-                    output_lines.append(str(responses))
+                    # If there's an error, continue to next attempt
+                    time.sleep(1)
+                    continue
 
-                return '\n'.join(output_lines)
-
-            except ConnectionException:
+            except (subprocess.TimeoutExpired, subprocess.SubprocessError, ConnectionException):
                 time.sleep(1)  # Wait before retry
                 continue
 
@@ -196,32 +216,6 @@ class PrinterCommunicator:
         try:
             # Use the correct command - getfileinfo works, getfiles doesn't
             response = self._run_printer_command('getfileinfo')
-
-            # Handle case where response is captured but _run_printer_command returns empty
-            # We need to call the uart command directly and capture output differently
-            if not response:
-                # Direct call to get the file info
-                import io
-                import contextlib
-
-                uart = UartWifi(self.printer_ip, self.printer_port)
-                responses = uart.send_request('getfileinfo')
-
-                output_lines = []
-                if responses is not None:
-                    for response in responses:
-                        if hasattr(response, 'print'):
-                            # Capture stdout from response.print()
-                            f = io.StringIO()
-                            with contextlib.redirect_stdout(f):
-                                response.print()
-                            captured = f.getvalue().strip()
-                            if captured:
-                                output_lines.append(captured)
-                        elif response is not None:
-                            output_lines.append(str(response))
-
-                response = '\n'.join(output_lines)
 
             if response and response.strip():
                 # Parse the response format: "1.pwmb: 16mm base - Part 1.pwmb"

@@ -713,9 +713,20 @@ def api_get_printer_files():
                 # Convert files to a more structured format
                 file_list = []
                 for file_info in files:
-                    if hasattr(file_info, '__dict__'):
+                    if isinstance(file_info, dict):
+                        # Handle dictionary format (new implementation)
+                        file_data = {
+                            'name': file_info.get('name', 'Unknown'),
+                            'internal_name': file_info.get('internal_name', ''),
+                            'size': file_info.get('size', 0),
+                            'date': file_info.get('date', 'Unknown'),
+                            'type': file_info.get('type', 'Unknown')
+                        }
+                    elif hasattr(file_info, '__dict__'):
+                        # Handle object format (legacy)
                         file_data = {
                             'name': getattr(file_info, 'name', 'Unknown'),
+                            'internal_name': getattr(file_info, 'internal_name', ''),
                             'size': getattr(file_info, 'size', 0),
                             'date': getattr(file_info, 'date', 'Unknown'),
                             'type': getattr(file_info, 'type', 'Unknown')
@@ -724,6 +735,7 @@ def api_get_printer_files():
                         # Handle simple string format
                         file_data = {
                             'name': str(file_info),
+                            'internal_name': str(file_info),
                             'size': 0,
                             'date': 'Unknown',
                             'type': 'Unknown'
