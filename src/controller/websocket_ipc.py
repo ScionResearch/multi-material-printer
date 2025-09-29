@@ -122,11 +122,13 @@ class WebSocketIPCClient:
             logger.info("Connected to SocketIO server")
 
             # Announce ourselves as the print manager
-            self.emit('client_register', {
+            logger.info("Sending client_register event to server...")
+            result = self.emit('client_register', {
                 'client_type': 'print_manager',
                 'capabilities': ['print_control', 'mmu_control', 'status_monitoring'],
                 'timestamp': datetime.now().isoformat()
             })
+            logger.info(f"client_register event sent: {result}")
 
             if self.on_connection_changed:
                 self.on_connection_changed(True)

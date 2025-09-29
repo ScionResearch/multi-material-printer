@@ -964,6 +964,7 @@ def handle_disconnect():
 @socketio.on('client_register')
 def handle_client_register(data):
     """Handle client registration (print manager identification)"""
+    print(f"[DEBUG] client_register event received! Data: {data}")
     client_type = data.get('client_type') if isinstance(data, dict) else None
     sid = getattr(request, 'sid', None)  # type: ignore[attr-defined]
     print(f"Client registration: {client_type} from {sid}")
