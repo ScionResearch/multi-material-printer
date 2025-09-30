@@ -14,81 +14,98 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Socket.IO connection management
 function initializeSocket() {
-    socket = io();
+    // Prefer pure WebSocket transport to reduce Engine.IO long-poll churn.
+    const MAX_WS_FAILS_BEFORE_FALLBACK = 3;
+    let wsFailures = 0;
 
-    socket.on('connect', function() {
-        connectionStatus = 'connected';
-        updateConnectionIndicator();
-        console.log('Connected to server');
-    });
+    function connect(preferPolling = false) {
+        const transports = preferPolling ? ['polling', 'websocket'] : ['websocket'];
+        socket = io({
+            transports,
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 1000,
+            reconnectionDelayMax: 10000,
+            timeout: 5000,
+            autoConnect: true
+        });
+        console.log(preferPolling ? 'Using mixed transports (polling+websocket) fallback' : 'Attempting WebSocket-only connection...');
+        registerHandlers();
+    }
 
-    socket.on('disconnect', function() {
-        connectionStatus = 'disconnected';
-        updateConnectionIndicator();
-        console.log('Disconnected from server');
-    });
-
-    socket.on('connect_error', function(error) {
-        connectionStatus = 'error';
-        updateConnectionIndicator();
-        console.error('Connection error:', error);
-    });
-
-    // Global event handlers
-    socket.on('status_update', function(data) {
-        updateGlobalStatus(data);
-        // This will be overridden by page-specific handlers
-        console.log('Status update:', data);
-    });
-
-    socket.on('system_alert', function(data) {
-        showAlert(data.message, data.type || 'info');
-    });
-
-    socket.on('system_status', function(data) {
-        if (typeof data.print_manager_connected === 'boolean') {
-            backendStatus = data.print_manager_connected ? 'online' : 'offline';
-            updateBackendIndicator();
-        }
-    });
-    // Centralized log message handler so all pages receive logs
-    socket.on('log_message', function(data) {
-        const logContainer = document.getElementById('activity-log') || document.getElementById('process-log');
-        if (logContainer) {
-            const entry = document.createElement('div');
-            const timestamp = new Date(data.timestamp || Date.now()).toLocaleTimeString();
-            const level = (data.level || 'info').toLowerCase();
-            const levelClass = level === 'error' ? 'text-danger' : level === 'warning' ? 'text-warning' : level === 'debug' ? 'text-muted' : 'text-info';
-            entry.className = `log-entry ${levelClass}`;
-            entry.textContent = `[${timestamp}] ${data.component ? '['+data.component+'] ' : ''}${data.message}`;
-            logContainer.appendChild(entry);
-            // Keep last 300 entries max
-            while (logContainer.children.length > 300) {
-                logContainer.removeChild(logContainer.firstChild);
+    function registerHandlers() {
+        socket.on('connect', function() {
+            connectionStatus = 'connected';
+            updateConnectionIndicator();
+            console.log('Connected to server (id=' + socket.id + ')');
+            wsFailures = 0;
+        });
+        socket.on('disconnect', function(reason) {
+            connectionStatus = 'disconnected';
+            updateConnectionIndicator();
+            console.log('Disconnected from server (' + reason + ')');
+        });
+        socket.on('connect_error', function(error) {
+            connectionStatus = 'error';
+            updateConnectionIndicator();
+            console.error('Connection error:', error.message || error);
+            wsFailures += 1;
+            if (wsFailures === MAX_WS_FAILS_BEFORE_FALLBACK) {
+                console.warn('Falling back to polling+websocket due to repeated failures');
+                try { socket.close(); } catch(e) {}
+                setTimeout(() => connect(true), 500);
             }
-            logContainer.scrollTop = logContainer.scrollHeight;
-        }
-    });
-
-    // Also derive backend status from status updates tagged WEBSOCKET
-    socket.on('status_update', function(data) {
-        if (data.component === 'WEBSOCKET') {
-            if (data.status && data.status.toLowerCase().includes('connected')) {
-                backendStatus = 'online';
+        });
+        socket.on('status_update', function(data) {
+            updateGlobalStatus(data);
+            console.log('Status update:', data);
+        });
+        socket.on('system_alert', function(data) {
+            showAlert(data.message, data.type || 'info');
+        });
+        socket.on('system_status', function(data) {
+            if (typeof data.print_manager_connected === 'boolean') {
+                backendStatus = data.print_manager_connected ? 'online' : 'offline';
                 updateBackendIndicator();
             }
-            if (data.status && data.status.toLowerCase().includes('disconnected')) {
-                backendStatus = 'offline';
-                updateBackendIndicator();
+        });
+        socket.on('log_message', function(data) {
+            const logContainer = document.getElementById('activity-log') || document.getElementById('process-log');
+            if (logContainer) {
+                const entry = document.createElement('div');
+                const timestamp = new Date(data.timestamp || Date.now()).toLocaleTimeString();
+                const level = (data.level || 'info').toLowerCase();
+                const levelClass = level === 'error' ? 'text-danger' : level === 'warning' ? 'text-warning' : level === 'debug' ? 'text-muted' : 'text-info';
+                entry.className = `log-entry ${levelClass}`;
+                entry.textContent = `[${timestamp}] ${data.component ? '['+data.component+'] ' : ''}${data.message}`;
+                logContainer.appendChild(entry);
+                while (logContainer.children.length > 300) {
+                    logContainer.removeChild(logContainer.firstChild);
+                }
+                logContainer.scrollTop = logContainer.scrollHeight;
             }
-        }
-    });
+        });
+        socket.on('status_update', function(data) {
+            if (data.component === 'WEBSOCKET') {
+                if (data.status && data.status.toLowerCase().includes('connected')) {
+                    backendStatus = 'online';
+                    updateBackendIndicator();
+                }
+                if (data.status && data.status.toLowerCase().includes('disconnected')) {
+                    backendStatus = 'offline';
+                    updateBackendIndicator();
+                }
+            }
+        });
+    }
+
+    connect(false); // initial attempt
+    updateConnectionIndicator();
 }
 
 function updateConnectionIndicator() {
     const indicator = document.getElementById('connection-status');
     if (!indicator) return;
-
     switch(connectionStatus) {
         case 'connected':
             indicator.className = 'badge bg-success';

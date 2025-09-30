@@ -25,6 +25,20 @@ from pathlib import Path
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_socketio import SocketIO, emit
+
+# --- Early async mode selection & optional eventlet monkey patch -----------------
+# We explicitly declare the async_mode to avoid Flask-SocketIO auto-detection churn
+# and inconsistent transport behavior (observed as massive 'Invalid session' noise
+# in logs when falling back between polling and websocket under load).
+ASYNC_MODE = os.environ.get("MMU_SOCKET_ASYNC", "eventlet")  # default preference
+if ASYNC_MODE == "eventlet":
+    try:
+        import eventlet  # type: ignore
+        eventlet.monkey_patch()  # must happen before standard library socket use
+    except Exception:
+        ASYNC_MODE = "threading"  # graceful fallback
+elif ASYNC_MODE not in {"gevent", "threading"}:
+    ASYNC_MODE = "threading"
 import subprocess  # TODO: remove if no longer needed after full refactor (left temporarily for any remaining usage)
 
 # Add the controller modules to the Python path
@@ -45,7 +59,20 @@ print("Using WebSocket-based IPC system (shared_status deprecated)")
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'scion-mmu-controller-secret-key'
-socketio = SocketIO(app, cors_allowed_origins="*", logger=True, engineio_logger=True)
+
+# SocketIO tuning: reduce log verbosity (can re-enable with MMU_SOCKET_DEBUG=1)
+_debug_socket = os.environ.get("MMU_SOCKET_DEBUG") == "1"
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode=ASYNC_MODE,
+    logger=_debug_socket,
+    engineio_logger=_debug_socket,
+    ping_interval=25,      # seconds between pings
+    ping_timeout=20,       # timeout before considering a client gone
+    max_http_buffer_size=1_000_000,
+    cookie=None            # stateless; avoid sticky session issues for kiosk browsers
+)
 
 # Global variables for application state
 current_status = {
@@ -630,6 +657,27 @@ def api_get_printer_files():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/health')
+def api_health():
+    """Lightweight health/diagnostic endpoint for monitoring & readiness probes.
+
+    Returns basic server, controller, and websocket statistics so external
+    supervisors (systemd, k8s probe, etc.) can judge liveness without invoking
+    heavier routes or establishing a Socket.IO session.
+    """
+    try:
+        pm_connected = connected_clients['print_manager'] is not None
+        return jsonify({
+            'ok': True,
+            'server_time': datetime.utcnow().isoformat() + 'Z',
+            'async_mode': ASYNC_MODE,
+            'print_manager_connected': pm_connected,
+            'web_client_count': len(connected_clients['web_clients']),
+            'connected_client_ids_sample': list(connected_clients['web_clients'])[:5]
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
 @app.route('/api/printer/start-print', methods=['POST'])
 def api_start_printer_print():
     """API endpoint to start printing a file on the printer"""
@@ -895,7 +943,8 @@ def handle_connect():
     # Flask-SocketIO provides request.sid at runtime; ignore static type checker
     sid = getattr(request, 'sid', None)  # type: ignore[attr-defined]
     if sid:
-        print(f'Client connected: {sid}')
+        if _debug_socket:
+            print(f'Client connected: {sid}')
         connected_clients['web_clients'].add(sid)
     emit('status_update', current_status)
 
@@ -904,11 +953,13 @@ def handle_disconnect():
     """Handle client disconnection"""
     sid = getattr(request, 'sid', None)  # type: ignore[attr-defined]
     if sid:
-        print(f'Client disconnected: {sid}')
+        if _debug_socket:
+            print(f'Client disconnected: {sid}')
         connected_clients['web_clients'].discard(sid)
         if connected_clients['print_manager'] == sid:
             connected_clients['print_manager'] = None
-            print('Print manager disconnected')
+            if _debug_socket:
+                print('Print manager disconnected')
             emit('system_status', {
                 'print_manager_connected': False,
                 'timestamp': datetime.now().isoformat()
@@ -917,10 +968,12 @@ def handle_disconnect():
 @socketio.on('client_register')
 def handle_client_register(data):
     """Handle client registration (print manager identification)"""
-    print(f"[DEBUG] client_register event received! Data: {data}")
+    if _debug_socket:
+        print(f"[DEBUG] client_register event received! Data: {data}")
     client_type = data.get('client_type') if isinstance(data, dict) else None
     sid = getattr(request, 'sid', None)  # type: ignore[attr-defined]
-    print(f"Client registration: {client_type} from {sid}")
+    if _debug_socket:
+        print(f"Client registration: {client_type} from {sid}")
 
     if client_type == 'print_manager' and sid:
         connected_clients['print_manager'] = sid
@@ -1031,6 +1084,7 @@ if __name__ == '__main__':
     print(f"Controllers available: {CONTROLLERS_AVAILABLE}")
     print(f"Config path: {get_config_path()}")
     print(f"Recipe path: {get_recipe_path()}")
+    print(f"Async mode: {ASYNC_MODE}")
 
     # Setup logging integration
     logging_available = setup_logging_integration()
@@ -1040,7 +1094,9 @@ if __name__ == '__main__':
 
     try:
         # Run the Flask application
-        socketio.run(app, host='0.0.0.0', port=5000, debug=False)  # Debug mode disabled to fix event handler registration
+        # Debug=False ensures single process and stable handler registration.
+        # Use environment variable FLASK_DEBUG only for local dev if needed.
+        socketio.run(app, host='0.0.0.0', port=5000, debug=False)
     except KeyboardInterrupt:
         print("\nShutting down...")
     finally:
