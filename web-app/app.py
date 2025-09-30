@@ -433,23 +433,22 @@ def api_material_change_sequence():
         if target_material not in ['A', 'B', 'C', 'D']:
             return jsonify({'success': False, 'message': 'Invalid target material'}), 400
 
-        # Send command via WebSocket to print manager
-        command_data = {
-            'type': 'run_material_change',
-            'parameters': {
-                'target_material': target_material,
-                'drain_time': sequence_config.get('drain_time', 30),
-                'fill_time': sequence_config.get('fill_time', 25),
-                'mix_time': sequence_config.get('mix_time', 10),
-                'settle_time': sequence_config.get('settle_time', 5)
-            },
-            'timestamp': datetime.now().isoformat()
-        }
-        socketio.emit('command', command_data)
+        # Use helper to ensure print manager connection and consistent command handling
+        command_id = send_command_to_print_manager('run_material_change', {
+            'target_material': target_material,
+            'drain_time': sequence_config.get('drain_time', 30),
+            'fill_time': sequence_config.get('fill_time', 25),
+            'mix_time': sequence_config.get('mix_time', 10),
+            'settle_time': sequence_config.get('settle_time', 5)
+        })
+
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
 
         return jsonify({
             'success': True,
-            'message': f'Material change sequence to {target_material} started via WebSocket'
+            'message': f'Material change sequence to {target_material} started',
+            'command_id': command_id
         })
 
     except Exception as e:
@@ -621,58 +620,12 @@ def api_get_printer_files():
         from printer_comms import PrinterCommunicator
         communicator = PrinterCommunicator()
 
-        try:
-            files = communicator.get_files()
-            if files:
-                # Convert files to a more structured format
-                file_list = []
-                for file_info in files:
-                    if isinstance(file_info, dict):
-                        # Handle dictionary format (new implementation)
-                        file_data = {
-                            'name': file_info.get('name', 'Unknown'),
-                            'internal_name': file_info.get('internal_name', ''),
-                            'size': file_info.get('size', 0),
-                            'date': file_info.get('date', 'Unknown'),
-                            'type': file_info.get('type', 'Unknown')
-                        }
-                    elif hasattr(file_info, '__dict__'):
-                        # Handle object format (legacy)
-                        file_data = {
-                            'name': getattr(file_info, 'name', 'Unknown'),
-                            'internal_name': getattr(file_info, 'internal_name', ''),
-                            'size': getattr(file_info, 'size', 0),
-                            'date': getattr(file_info, 'date', 'Unknown'),
-                            'type': getattr(file_info, 'type', 'Unknown')
-                        }
-                    else:
-                        # Handle simple string format
-                        file_data = {
-                            'name': str(file_info),
-                            'internal_name': str(file_info),
-                            'size': 0,
-                            'date': 'Unknown',
-                            'type': 'Unknown'
-                        }
-                    file_list.append(file_data)
-
-                return jsonify({
-                    'success': True,
-                    'files': file_list,
-                    'count': len(file_list)
-                })
-            else:
-                return jsonify({
-                    'success': True,
-                    'files': [],
-                    'count': 0,
-                    'message': 'No files found on printer'
-                })
-        except Exception as files_err:
-            return jsonify({
-                'success': False,
-                'message': f'Failed to get printer files: {str(files_err)}'
-            })
+        files = communicator.get_files()
+        return jsonify({
+            'success': True,
+            'files': files,
+            'count': len(files)
+        })
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500

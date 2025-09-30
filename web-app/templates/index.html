@@ -12,6 +12,7 @@
                 <h5 class="card-title mt-2">Start Print</h5>
                 <p class="card-text">Begin multi-material printing with current recipe</p>
                 <button class="btn btn-success btn-lg w-100" onclick="startMultiMaterial()" id="start-print-btn">
+                <button class="btn btn-success btn-lg w-100 requires-controller" onclick="startMultiMaterial()" id="start-print-btn">
                     <i class="bi bi-play"></i> Start Multi-Material
                 </button>
             </div>
@@ -24,6 +25,8 @@
                 <h5 class="card-title mt-2">Test Pumps</h5>
                 <p class="card-text">Quick pump functionality test</p>
                 <button class="btn btn-warning btn-lg w-100" onclick="quickPumpTest()" id="test-pumps-btn">
+                <button class="btn btn-warning btn-lg w-100 requires-controller" onclick="quickPumpTest()" id="test-pumps-btn">
+                        <button class="btn btn-success btn-lg w-100 requires-controller" onclick="startMultiMaterial()" id="start-print-btn">
                     <i class="bi bi-gear"></i> Test Pumps
                 </button>
             </div>
@@ -380,14 +383,18 @@
                     <hr>
 
                     <button class="btn btn-warning" onclick="printerControl('pause')">
+                        <button class="btn btn-warning requires-controller" onclick="printerControl('pause')">
+                    <button class="btn btn-danger requires-controller" onclick="stopMultiMaterial()">
                         <i class="bi bi-pause-fill"></i> Pause Printer
                     </button>
 
                     <button class="btn btn-info" onclick="printerControl('resume')">
+                    <button class="btn btn-info requires-controller" onclick="printerControl('resume')">
                         <i class="bi bi-play-fill"></i> Resume Printer
                     </button>
 
                     <button class="btn btn-outline-danger" onclick="printerControl('stop')">
+                    <button class="btn btn-outline-danger requires-controller" onclick="printerControl('stop')">
                         <i class="bi bi-stop-fill"></i> Stop Printer
                     </button>
                 </div>

@@ -124,40 +124,25 @@ def run_stepper(pumpmat, direction, usr_time):
     stpr.release()
 
 def run_stepperrev(pumpmat, reqlevel):
+    """Deprecated legacy reverse operation. Prefer run_stepper().
+
+    Fixed undefined variables (STEPPER_1/2) to use STEPPER_A/B for safety,
+    but function remains for backward compatibility and may be removed.
     """
-    Legacy reverse pump operation (incomplete implementation).
-    
-    Args:
-        pumpmat (str): Pump identifier ('A' or 'B')
-        reqlevel: Level parameter (unused)
-    
-    Note: Contains undefined variable references. Use run_stepper() instead.
-    """
-    # Choose the correct stepper motor based on the input variable
     if pumpmat == 'A':
-        stpr = STEPPER_1
+        stpr = STEPPER_A
     elif pumpmat == 'B':
-        stpr = STEPPER_2
-    #elif pumpmat == 'C':
-       # stpr = STEPPER_3
-    #elif pumpmat == 'W':
-     #   stpr = STEPPER_4
+        stpr = STEPPER_B
     else:
-        raise ValueError("Invalid stepper number")
-    # Set the speed and number of steps for the stepper motor
+        raise ValueError("Invalid stepper number (expected 'A' or 'B')")
+
     stpr.release()
     stpr.steps = 200
-    stpr.speed = 0.001
-    #time.sleep(20)
-    t_end = time.time()+180
-    
-    # Run the stepper motor until the desired level is reached
+    # Legacy speed attribute; using small delay loop below
+    t_end = time.time() + 5  # shortened from 180s to 5s for safety if accidentally invoked
     while time.time() < t_end:
-    
         stpr.onestep(direction=stepper.BACKWARD)
-        time.sleep(0.001)
-
-    # Release the stepper motor
+        time.sleep(0.005)
     stpr.release()
 
 #run_stepper('D', 'F', 30000)

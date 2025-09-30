@@ -816,6 +816,14 @@ footer {
     opacity: 1;
 }
 
+/* Disable interactive controls when controller offline */
+body.controller-offline .requires-controller {
+    pointer-events: none;
+    opacity: 0.5;
+    filter: grayscale(40%);
+    cursor: not-allowed !important;
+}
+
 /* Configuration page specific styles */
 .config-section {
     margin-bottom: 2rem;

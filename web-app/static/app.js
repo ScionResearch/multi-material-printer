@@ -51,6 +51,24 @@ function initializeSocket() {
             updateBackendIndicator();
         }
     });
+    // Centralized log message handler so all pages receive logs
+    socket.on('log_message', function(data) {
+        const logContainer = document.getElementById('activity-log') || document.getElementById('process-log');
+        if (logContainer) {
+            const entry = document.createElement('div');
+            const timestamp = new Date(data.timestamp || Date.now()).toLocaleTimeString();
+            const level = (data.level || 'info').toLowerCase();
+            const levelClass = level === 'error' ? 'text-danger' : level === 'warning' ? 'text-warning' : level === 'debug' ? 'text-muted' : 'text-info';
+            entry.className = `log-entry ${levelClass}`;
+            entry.textContent = `[${timestamp}] ${data.component ? '['+data.component+'] ' : ''}${data.message}`;
+            logContainer.appendChild(entry);
+            // Keep last 300 entries max
+            while (logContainer.children.length > 300) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+    });
 
     // Also derive backend status from status updates tagged WEBSOCKET
     socket.on('status_update', function(data) {
@@ -96,12 +114,15 @@ function updateBackendIndicator() {
     if (backendStatus === 'online') {
         indicator.className = 'badge bg-success';
         indicator.innerHTML = '<i class="bi bi-cpu"></i> Controller Online';
+        document.body.classList.remove('controller-offline');
     } else if (backendStatus === 'offline') {
         indicator.className = 'badge bg-danger';
         indicator.innerHTML = '<i class="bi bi-cpu"></i> Controller Offline';
+        document.body.classList.add('controller-offline');
     } else {
         indicator.className = 'badge bg-secondary';
         indicator.innerHTML = '<i class="bi bi-cpu"></i> Controller Unknown';
+        document.body.classList.add('controller-offline');
     }
 }
 

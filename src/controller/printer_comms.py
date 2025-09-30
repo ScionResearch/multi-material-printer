@@ -171,19 +171,25 @@ class PrinterCommunicator:
         Returns:
             list: Available filenames or empty list if error
         """
-        file_list_obj = self._run_printer_command('getfile')  # Correct command is 'getfile'
-        if file_list_obj and hasattr(file_list_obj, 'files'):
-            files = []
-            for file_entry in file_list_obj.files:
-                files.append({
-                    'name': file_entry.external,
-                    'internal_name': file_entry.internal,
-                    'size': getattr(file_entry, 'size', 0),
-                    'type': getattr(file_entry, 'type', 'CTB'),
-                    'date': getattr(file_entry, 'date', 'Unknown')
-                })
-            return files
-        return []
+        try:
+            file_list_obj = self._run_printer_command('getfile')
+            results = []
+            if file_list_obj and hasattr(file_list_obj, 'files'):
+                for file_entry in getattr(file_list_obj, 'files', []) or []:
+                    try:
+                        results.append({
+                            'name': getattr(file_entry, 'external', getattr(file_entry, 'name', 'Unknown')),
+                            'internal_name': getattr(file_entry, 'internal', ''),
+                            'size': getattr(file_entry, 'size', 0),
+                            'type': getattr(file_entry, 'type', 'CTB'),
+                            'date': getattr(file_entry, 'date', 'Unknown')
+                        })
+                    except Exception:
+                        continue
+            return results
+        except Exception as e:
+            logging.error(f"Failed to retrieve file list: {e}")
+            return []
     
     def start_print(self, filename):
         """
