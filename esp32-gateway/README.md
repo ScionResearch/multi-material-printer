@@ -4,26 +4,27 @@ This directory contains firmware for the ESP32 that creates an isolated WiFi net
 
 ## Overview
 
-The ESP32 acts as a WiFi gateway/router creating a dedicated 192.168.4.x network for:
-- **192.168.4.1** - ESP32 Gateway (this device)
-- **192.168.4.2+** - Raspberry Pi and Anycubic Printer (automatic DHCP)
-- **Software auto-discovery** handles finding the printer's current IP
+The ESP32-C3 acts as a WiFi gateway/router creating a dedicated 192.168.4.x network for:
+- **192.168.4.1** - ESP32-C3 Gateway (this device)
+- **192.168.4.2** - Anycubic Printer (automatic DHCP - first device to connect)
+- **192.168.4.3** - Raspberry Pi (static IP configured on Pi)
 
 **Key Features:**
-- Simple WiFi access point (no complex DHCP reservations needed)
+- Simple WiFi access point with DHCP server
 - Device monitoring and MAC address logging
-- Automatic printer IP discovery in Python software
-- Robust solution that works even when IPs change
+- Consistent IP addressing (printer always gets .2, Pi uses static .3)
+- Network isolation for reliable printer communication
 
 ## Files
 
-- `wifi_gateway.ino` - Main firmware file
+- `src/main.cpp` - Main firmware file (PlatformIO)
+- `wifi_gateway.ino` - Legacy Arduino sketch (for reference)
 - `README.md` - This documentation
-- `platformio.ini` - PlatformIO configuration (optional)
+- `platformio.ini` - PlatformIO configuration
 
 ## Hardware Requirements
 
-- ESP32 development board (any variant with WiFi)
+- **ESP32-C3** development board (or other ESP32 variants: ESP32, ESP32-S3)
 - USB cable for programming
 - Computer with Arduino IDE or PlatformIO
 
@@ -44,31 +45,51 @@ The ESP32 acts as a WiFi gateway/router creating a dedicated 192.168.4.x network
 
 2. **Configure Arduino IDE**
    - Connect ESP32 to computer via USB
-   - Select Tools → Board → ESP32 Dev Module (or your specific board)
+   - Select Tools → Board → ESP32C3 Dev Module (or ESP32 Dev Module for other variants)
    - Select Tools → Port → [Your ESP32 port]
-   - Set Tools → Upload Speed → 115200
+   - Set Tools → Upload Speed → 921600
 
 3. **Upload Firmware**
    - Open `wifi_gateway.ino` in Arduino IDE
    - Click Upload button (→) or press Ctrl+U
    - Monitor serial output at 115200 baud to verify success
 
-### Method 2: PlatformIO (Advanced Users)
+### Method 2: PlatformIO (Recommended for ESP32-C3)
 
 1. **Install PlatformIO**
    - Install VS Code
-   - Add PlatformIO extension
+   - Add PlatformIO extension from marketplace
 
-2. **Create Project**
+2. **Build and Upload**
    ```bash
-   pio project init --board esp32dev
-   cp wifi_gateway.ino src/main.cpp
+   # Default environment is esp32c3 (set in platformio.ini)
+   platformio run --target upload
+
+   # Or for specific board type:
+   platformio run -e esp32c3 --target upload    # For ESP32-C3
+   platformio run -e esp32dev --target upload   # For ESP32
+   platformio run -e esp32s3 --target upload    # For ESP32-S3
    ```
 
-3. **Upload**
+3. **Monitor Serial Output**
    ```bash
-   pio run -t upload
-   pio device monitor
+   platformio device monitor
+
+   # Or upload and monitor in one command:
+   platformio run --target upload --target monitor
+   ```
+
+4. **Serial Monitor on Raspberry Pi**
+   ```bash
+   # Find the port (ESP32-C3 typically shows as /dev/ttyACM0)
+   ls /dev/tty* | grep -E "(USB|ACM)"
+
+   # Connect with screen
+   screen /dev/ttyACM0 115200
+   # Exit: Ctrl+A then K, then Y
+
+   # Or use minicom
+   sudo minicom -D /dev/ttyACM0 -b 115200
    ```
 
 ### Method 3: ESP32 Flash Tool
@@ -100,38 +121,49 @@ IPAddress dhcp_end(192, 168, 4, 10);     // DHCP range end
 
 ### After Flashing
 
-1. **Verify ESP32 Operation**
-   - Open Arduino IDE Serial Monitor (Tools → Serial Monitor)
+1. **Verify ESP32-C3 Operation**
+   - Open PlatformIO Serial Monitor: `platformio device monitor`
    - Set baud rate to 115200
-   - Reset ESP32 - you should see startup messages
+   - Reset ESP32-C3 - you should see startup messages
    - Look for "Access Point created successfully"
 
-2. **Connect Devices to WiFi Network**
-   - Connect Raspberry Pi to "PumpedMMP" network (password: "00000000")
-   - Connect printer to "PumpedMMP" network
-   - Devices will get automatic IP addresses via DHCP
-
-3. **Test Auto-Discovery** (on Raspberry Pi)
+2. **Configure Raspberry Pi Static IP**
    ```bash
-   ssh pildp@10.10.36.109
+   # On Raspberry Pi, edit network configuration
+   sudo nano /etc/dhcpcd.conf
+
+   # Add these lines for wlan0:
+   interface wlan0
+   static ip_address=192.168.4.3/24
+   static routers=192.168.4.1
+
+   # Save and restart networking
+   sudo systemctl restart dhcpcd
+   ```
+
+3. **Connect Devices to WiFi Network**
+   - Connect Anycubic Printer to "PumpedMMP" network (password: "00000000")
+   - Printer will automatically get IP **192.168.4.2** via DHCP
+   - Connect Raspberry Pi to "PumpedMMP" network
+   - Pi will use static IP **192.168.4.3**
+
+4. **Verify Network Configuration**
+   ```bash
+   # On Raspberry Pi
+   ip addr show wlan0          # Should show 192.168.4.3
+   ping 192.168.4.1            # Ping ESP32-C3 gateway
+   ping 192.168.4.2            # Ping printer
+
+   # Test printer communication
    cd /path/to/multi-material-printer
-   python3 src/controller/printer_comms.py --discover
+   python3 src/controller/printer_comms.py -i 192.168.4.2 -c getstatus
    ```
-
-   This will scan the network and find the printer automatically.
-
-4. **Update Project Configuration** (optional)
-   ```bash
-   cp config/network_settings.ini.template config/network_settings.ini
-   ```
-
-   The software now auto-discovers the printer IP, so manual configuration is optional.
 
 ## Verification
 
 ### Test Network Connectivity
 
-1. **Check ESP32 is broadcasting**
+1. **Check ESP32-C3 is broadcasting**
    ```bash
    # On any device, scan for WiFi networks
    # Look for "PumpedMMP" network
@@ -139,58 +171,54 @@ IPAddress dhcp_end(192, 168, 4, 10);     // DHCP range end
 
 2. **Test Pi connectivity** (from Pi)
    ```bash
-   ping 192.168.4.1  # Should reach ESP32
+   ping 192.168.4.1  # Should reach ESP32-C3 gateway
+   ping 192.168.4.2  # Should reach printer
    ```
 
-3. **Auto-discover printer** (from Pi)
+3. **Test printer communication**
    ```bash
    cd /path/to/multi-material-printer
-   python3 src/controller/printer_comms.py --discover
-   ```
-
-4. **Test printer communication with auto-connect**
-   ```bash
-   python3 src/controller/printer_comms.py --auto-connect
-   ```
-
-5. **Manual IP test if known**
-   ```bash
-   python3 src/controller/printer_comms.py -i 192.168.4.3 -c getstatus
+   python3 src/controller/printer_comms.py -i 192.168.4.2 -c getstatus
    ```
 
 ### Monitor Connected Devices
 
-The ESP32 firmware prints connected devices every 30 seconds to serial monitor:
+The ESP32-C3 firmware prints connected devices every 30 seconds to serial monitor:
 ```
-Connected devices: 2
-  Device 1: IP 192.168.4.2, MAC aa:bb:cc:dd:ee:ff
-  Device 2: IP 192.168.4.3, MAC 11:22:33:44:55:66
+--- Connected Devices ---
+Total devices: 2
+  Device 1: 192.168.4.2 (MAC: 28:6D:CD:A6:D9:F6) -> Anycubic Printer [OK]
+  Device 2: 0.0.0.0 (MAC: B8:27:EB:48:32:7B) -> Raspberry Pi [OK]
+--- End Device List ---
 ```
+
+Note: The Pi shows as 0.0.0.0 because it uses a static IP (not assigned by DHCP).
 
 ## Troubleshooting
 
-### ESP32 Won't Flash
+### ESP32-C3 Won't Flash
 - Check USB cable (data + power, not just power)
 - Hold BOOT button while pressing RESET, then release RESET
 - Try different USB port or cable
-- Verify correct board selection in Arduino IDE
+- Verify correct board selection: `esp32c3` environment in PlatformIO
 
 ### WiFi Network Not Visible
 - Check serial monitor for error messages
-- Verify ESP32 power supply (USB or external)
+- Verify ESP32-C3 power supply (USB or external)
 - Try different WiFi channel (modify code)
-- Check antenna connection (if external)
+- Press RESET button on ESP32-C3
 
 ### Devices Can't Connect
 - Verify password is correct ("00000000")
-- Check if maximum connections reached (default: 4)
-- Try restarting ESP32
+- Check if maximum connections reached (default: 10)
+- Try restarting ESP32-C3
 - Check device compatibility with 2.4GHz networks
 
-### IP Conflicts
-- Ensure no other 192.168.4.x networks nearby
-- Verify static IP configuration on Pi and printer
-- Check DHCP range doesn't overlap with static IPs
+### Printer Gets Wrong IP
+- Ensure printer boots and connects **before** Raspberry Pi
+- Printer should always get 192.168.4.2 (first DHCP client)
+- Pi uses static IP 192.168.4.3 (no conflict)
+- Power cycle both devices if IPs are swapped
 
 ## Advanced Configuration
 
