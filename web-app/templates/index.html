@@ -369,28 +369,24 @@
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
-                    <button class="btn btn-success btn-lg" onclick="startMultiMaterial()">
+                    <button class="btn btn-success btn-lg requires-controller" onclick="startMultiMaterial()">
                         <i class="bi bi-play-fill"></i> Start Multi-Material
                     </button>
 
-                    <button class="btn btn-danger" onclick="stopMultiMaterial()">
+                    <button class="btn btn-danger requires-controller" onclick="stopMultiMaterial()">
                         <i class="bi bi-stop-fill"></i> Stop Multi-Material
                     </button>
 
                     <hr>
 
-                    <button class="btn btn-warning" onclick="printerControl('pause')">
-                        <button class="btn btn-warning requires-controller" onclick="printerControl('pause')">
-                    <button class="btn btn-danger requires-controller" onclick="stopMultiMaterial()">
+                    <button class="btn btn-warning requires-controller" onclick="printerControl('pause')">
                         <i class="bi bi-pause-fill"></i> Pause Printer
                     </button>
 
-                    <button class="btn btn-info" onclick="printerControl('resume')">
                     <button class="btn btn-info requires-controller" onclick="printerControl('resume')">
                         <i class="bi bi-play-fill"></i> Resume Printer
                     </button>
 
-                    <button class="btn btn-outline-danger" onclick="printerControl('stop')">
                     <button class="btn btn-outline-danger requires-controller" onclick="printerControl('stop')">
                         <i class="bi bi-stop-fill"></i> Stop Printer
                     </button>
