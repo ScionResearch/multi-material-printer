@@ -3,46 +3,6 @@
 {% block title %}Dashboard - Scion Multi-Material Printer{% endblock %}
 
 {% block content %}
-<!-- Quick Action Cards -->
-<div class="row mb-4">
-    <div class="col-md-4">
-        <div class="card text-center h-100 quick-action-card border-success">
-            <div class="card-body">
-                <i class="bi bi-layers-fill text-success" style="font-size: 3rem;"></i>
-                <h5 class="card-title mt-2">Multi-Material Recipe</h5>
-                <p class="card-text">Enable automatic material changes during active print</p>
-                <button class="btn btn-success btn-lg w-100 requires-controller" onclick="startMultiMaterial()" id="start-print-btn">
-                    <i class="bi bi-check-circle"></i> Enable Recipe
-                </button>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card text-center h-100 quick-action-card border-warning">
-            <div class="card-body">
-                <i class="bi bi-gear-fill text-warning" style="font-size: 3rem;"></i>
-                <h5 class="card-title mt-2">Test Pumps</h5>
-                <p class="card-text">Quick pump functionality test</p>
-                <button class="btn btn-warning btn-lg w-100 requires-controller" onclick="quickPumpTest()" id="test-pumps-btn">
-                    <i class="bi bi-gear"></i> Test Pumps
-                </button>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="card text-center h-100 quick-action-card border-primary">
-            <div class="card-body">
-                <i class="bi bi-list-ul text-primary" style="font-size: 3rem;"></i>
-                <h5 class="card-title mt-2">Edit Recipe</h5>
-                <p class="card-text">Modify material change sequence</p>
-                <a href="{{ url_for('recipe_page') }}" class="btn btn-primary btn-lg w-100">
-                    <i class="bi bi-pencil"></i> Edit Recipe
-                </a>
-            </div>
-        </div>
-    </div>
-</div>
-
 <div class="row">
     <!-- Status Overview -->
     <div class="col-lg-8">
