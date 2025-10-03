@@ -118,15 +118,12 @@
                 <!-- Full Sequence Controls -->
                 <div class="mt-4 text-center">
                     <div class="btn-group" role="group">
-                        <button class="btn btn-success btn-lg" onclick="runFullSequence()">
                         <button class="btn btn-success btn-lg requires-controller" onclick="runFullSequence()">
                             <i class="bi bi-play-circle"></i> Run Full Sequence
                         </button>
-                        <button class="btn btn-warning" onclick="pauseSequence()">
                         <button class="btn btn-warning requires-controller" onclick="pauseSequence()">
                             <i class="bi bi-pause-circle"></i> Pause
                         </button>
-                        <button class="btn btn-danger" onclick="stopSequence()">
                         <button class="btn btn-danger requires-controller" onclick="stopSequence()">
                             <i class="bi bi-stop-circle"></i> Stop
                         </button>
@@ -186,11 +183,9 @@
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
-                    <button class="btn btn-danger btn-lg" onclick="emergencyStop()">
                     <button class="btn btn-danger btn-lg requires-controller" onclick="emergencyStop()">
                         <i class="bi bi-hand-thumbs-down"></i> EMERGENCY STOP
                     </button>
-                    <button class="btn btn-warning" onclick="drainAll()">
                     <button class="btn btn-warning requires-controller" onclick="drainAll()">
                         <i class="bi bi-arrow-down"></i> Drain All Pumps
                     </button>
@@ -230,7 +225,6 @@
                         <input type="number" class="form-control" id="duration-input" min="1" max="300" required>
                     </div>
                     <div class="d-grid">
-                        <button type="submit" class="btn btn-primary">
                         <button type="submit" class="btn btn-primary requires-controller">
                             <i class="bi bi-play"></i> Run Pump
                         </button>
@@ -254,15 +248,12 @@
                     </select>
                 </div>
                 <div class="d-grid gap-2">
-                    <button class="btn btn-outline-info" onclick="testConnections()">
                     <button class="btn btn-outline-info requires-controller" onclick="testConnections()">
                         <i class="bi bi-wifi"></i> Test Connections
                     </button>
-                    <button class="btn btn-outline-info" onclick="calibratePumps()">
                     <button class="btn btn-outline-info requires-controller" onclick="calibratePumps()">
                         <i class="bi bi-speedometer2"></i> Calibrate Pumps
                     </button>
-                    <button class="btn btn-outline-secondary" onclick="clearLog()">
                     <button class="btn btn-outline-secondary requires-controller" onclick="clearLog()">
                         <i class="bi bi-trash"></i> Clear Log
                     </button>
@@ -277,15 +268,12 @@
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
-                    <button class="btn btn-warning" onclick="printerControl('pause')">
                     <button class="btn btn-warning requires-controller" onclick="printerControl('pause')">
                         <i class="bi bi-pause"></i> Pause Print
                     </button>
-                    <button class="btn btn-success" onclick="printerControl('resume')">
                     <button class="btn btn-success requires-controller" onclick="printerControl('resume')">
                         <i class="bi bi-play"></i> Resume Print
                     </button>
-                    <button class="btn btn-outline-danger" onclick="printerControl('stop')">
                     <button class="btn btn-outline-danger requires-controller" onclick="printerControl('stop')">
                         <i class="bi bi-stop"></i> Stop Print
                     </button>
