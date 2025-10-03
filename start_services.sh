@@ -39,6 +39,8 @@ if ! already_running "Web App" "web-app/app.py"; then
 		echo "$WEB_PID" > "${PID_DIR}/web_app.pid"
 		echo "Web app started PID=$WEB_PID (log: $WEB_LOG)"
 	)
+	echo "Waiting 5 seconds for web app to initialize..."
+	sleep 5
 fi
 
 # Start print manager if not running
