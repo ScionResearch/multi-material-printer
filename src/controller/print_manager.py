@@ -879,6 +879,46 @@ class PrintManager:
         elif cmd_type == "stop_multi_material":
             self._recipe_active = False
             self._send_status_update("COMMAND", "Recipe deactivated - material changes disabled")
+        elif cmd_type == "pause_print":
+            # Pause the printer (not the print manager service)
+            if printer_comms:
+                try:
+                    success = printer_comms.pause_print(self.printer_ip)
+                    if success:
+                        self._send_status_update("PRINTER", "Printer paused")
+                    else:
+                        self._send_status_update("PRINTER", "Failed to pause printer", level="error")
+                except Exception as e:
+                    self._send_status_update("PRINTER", f"Error pausing printer: {e}", level="error")
+            else:
+                self._send_status_update("PRINTER", "Printer communication unavailable", level="error")
+        elif cmd_type == "resume_print":
+            # Resume the printer
+            if printer_comms:
+                try:
+                    success = printer_comms.resume_print(self.printer_ip)
+                    if success:
+                        self._send_status_update("PRINTER", "Printer resumed")
+                    else:
+                        self._send_status_update("PRINTER", "Failed to resume printer", level="error")
+                except Exception as e:
+                    self._send_status_update("PRINTER", f"Error resuming printer: {e}", level="error")
+            else:
+                self._send_status_update("PRINTER", "Printer communication unavailable", level="error")
+        elif cmd_type == "stop_print":
+            # Stop the current print job on the printer
+            if printer_comms:
+                try:
+                    success = printer_comms.stop_print(self.printer_ip)
+                    if success:
+                        self._recipe_active = False  # Also disable recipe when print stops
+                        self._send_status_update("PRINTER", "Print job stopped")
+                    else:
+                        self._send_status_update("PRINTER", "Failed to stop printer", level="error")
+                except Exception as e:
+                    self._send_status_update("PRINTER", f"Error stopping printer: {e}", level="error")
+            else:
+                self._send_status_update("PRINTER", "Printer communication unavailable", level="error")
         elif cmd_type == "emergency_stop":
             self._stop_event.set()
             self._send_status_update("COMMAND", "Emergency stop activated", level="warning")
