@@ -222,7 +222,8 @@ class PrinterCommunicator:
             bool: True if printer responds
         """
         status = self.get_status()
-        return status is not None and len(status) > 0
+        # A successful call returns a status object, failure returns None.
+        return status is not None
 
     def discover_printer_ip(self, network_base="192.168.4", timeout=2):
         """
