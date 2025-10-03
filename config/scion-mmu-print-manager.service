@@ -1,0 +1,33 @@
+[Unit]
+Description=Scion Multi-Material Printer - Print Manager Service
+Documentation=https://github.com/ScionResearch/multi-material-printer
+After=network-online.target
+Wants=network-online.target
+# Start after web interface is ready
+After=scion-mmu-web.service
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/multi-material-printer
+Environment="PYTHONUNBUFFERED=1"
+Environment="WEB_APP_URL=http://localhost:5000"
+Environment="MMU_SOCKET_ASYNC=threading"
+ExecStart=/usr/bin/python3 /home/pi/multi-material-printer/src/controller/print_manager.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Allow access to I2C, GPIO, and network
+DeviceAllow=/dev/i2c-1 rw
+DeviceAllow=/dev/gpiomem rw
+SupplementaryGroups=i2c gpio
+
+[Install]
+WantedBy=multi-user.target

@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+# --- Early async mode selection & optional eventlet monkey patch -----------------
+# CRITICAL: This block MUST be at the very top, before ANY other imports
+# eventlet.monkey_patch() modifies the standard library and must run before
+# any modules (especially flask, socket, threading) are imported.
+import os
+ASYNC_MODE = os.environ.get("MMU_SOCKET_ASYNC", "eventlet")
+if ASYNC_MODE == "eventlet":
+    try:
+        import eventlet  # type: ignore
+        eventlet.monkey_patch()
+    except Exception as e:
+        print(f"Monkey patching failed: {e}. Falling back to threading.")
+        ASYNC_MODE = "threading"
+elif ASYNC_MODE not in {"gevent", "threading"}:
+    ASYNC_MODE = "threading"
+
 """
 Scion Multi-Material Printer Web Interface
 
@@ -16,7 +32,6 @@ Author: Claude Code Assistant
 License: MIT
 """
 
-import os
 import sys
 import json
 import threading
@@ -25,20 +40,6 @@ from pathlib import Path
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_socketio import SocketIO, emit
-
-# --- Early async mode selection & optional eventlet monkey patch -----------------
-# We explicitly declare the async_mode to avoid Flask-SocketIO auto-detection churn
-# and inconsistent transport behavior (observed as massive 'Invalid session' noise
-# in logs when falling back between polling and websocket under load).
-ASYNC_MODE = os.environ.get("MMU_SOCKET_ASYNC", "eventlet")  # default preference
-if ASYNC_MODE == "eventlet":
-    try:
-        import eventlet  # type: ignore
-        eventlet.monkey_patch()  # must happen before standard library socket use
-    except Exception:
-        ASYNC_MODE = "threading"  # graceful fallback
-elif ASYNC_MODE not in {"gevent", "threading"}:
-    ASYNC_MODE = "threading"
 import subprocess  # TODO: remove if no longer needed after full refactor (left temporarily for any remaining usage)
 
 # Add the controller modules to the Python path
@@ -593,44 +594,25 @@ def api_save_network_config():
 
 @app.route('/api/config/test-connection', methods=['POST'])
 def api_test_connection():
-    """API endpoint to test printer connection"""
+    """API endpoint to test printer connection (delegated to print_manager)"""
     try:
-        if not CONTROLLERS_AVAILABLE:
-            return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
-
         # Get printer IP from request or config
         printer_ip = request.json.get('printer_ip') if request.json else None
         if not printer_ip:
             network_config = load_network_config()
             printer_ip = network_config['printer_ip']
 
-        # Test connection using printer_comms module
-        # Create a communicator instance and test the connection
-        from printer_comms import PrinterCommunicator
-        communicator = PrinterCommunicator()
-
-        # Try to get status as a connection test
-        try:
-            status = communicator.get_status()
-            result = status is not None
-
-            # Parse the status string (e.g., "status: stop")
-            if status and isinstance(status, str):
-                # Extract status from string like "status: stop"
-                if ':' in status:
-                    status_value = status.split(':', 1)[1].strip()
-                else:
-                    status_value = status.strip()
-                connection_details = f"Printer status: {status_value}"
-            else:
-                connection_details = f"Raw response: {status}" if status else "No response"
-        except Exception as conn_err:
-            result = False
-            connection_details = str(conn_err)
-
+        # Delegate to print_manager via WebSocket
+        command_id = send_command_to_print_manager('test_connection', {'printer_ip': printer_ip})
+        
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+        
+        # Return immediately - result will be sent via WebSocket event
         return jsonify({
-            'success': result,
-            'message': f'Connection {"successful" if result else "failed"}: {connection_details}',
+            'success': True,
+            'message': 'Connection test requested',
+            'command_id': command_id,
             'ip': printer_ip
         })
     except Exception as e:
@@ -638,20 +620,19 @@ def api_test_connection():
 
 @app.route('/api/printer/files', methods=['GET'])
 def api_get_printer_files():
-    """API endpoint to get list of print files from printer"""
+    """API endpoint to get list of print files from printer (delegated to print_manager)"""
     try:
-        if not CONTROLLERS_AVAILABLE:
-            return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
-
-        # Get printer files using printer_comms module
-        from printer_comms import PrinterCommunicator
-        communicator = PrinterCommunicator()
-
-        files = communicator.get_files()
+        # Delegate to print_manager via WebSocket
+        command_id = send_command_to_print_manager('get_files', {})
+        
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+        
+        # Result will be sent back via 'file_list_response' WebSocket event
         return jsonify({
             'success': True,
-            'files': files,
-            'count': len(files)
+            'message': 'File list requested',
+            'command_id': command_id
         })
 
     except Exception as e:

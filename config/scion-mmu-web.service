@@ -1,0 +1,26 @@
+[Unit]
+Description=Scion Multi-Material Printer - Web Interface
+Documentation=https://github.com/ScionResearch/multi-material-printer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/multi-material-printer/web-app
+Environment="PYTHONUNBUFFERED=1"
+Environment="MMU_SOCKET_ASYNC=threading"
+Environment="FLASK_ENV=production"
+ExecStart=/usr/bin/python3 /home/pi/multi-material-printer/web-app/app.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

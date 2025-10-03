@@ -4,11 +4,7 @@
  * Creates isolated WiFi network with DHCP reservations to ensure consistent
  * IP addressing for printer that cannot be configured with static IP.
  *
- * Network Configuration:
- * - Gateway (ESP32):     192.168.4.1
- * - Raspberry Pi:        192.168.4.2 (configured via DHCP reservation)
- * - Anycubic Printer:    192.168.4.3 (configured via DHCP reservation)
- * - DHCP Range:          192.168.4.4 - 192.168.4.10 (for other devices)
+
  *
  * Hardware: ESP32 (any variant with WiFi)
  * Dependencies: None (uses built-in WiFi AP functionality)
