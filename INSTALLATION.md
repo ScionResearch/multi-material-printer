@@ -17,11 +17,11 @@ This document provides installation instructions for the updated system with cri
 
 ### ESP32 Gateway Setup (Recommended)
 
-The ESP32 creates an isolated WiFi network with static IP assignments:
+The ESP32 creates an isolated WiFi network:
 
 - **ESP32 Gateway**: 192.168.4.1
-- **Raspberry Pi**: 192.168.4.2 (static IP required)
-- **Anycubic Printer**: 192.168.4.3 (static IP required)
+- **Raspberry Pi**: 192.168.4.3 (static IP required)
+- **Anycubic Printer**: 192.168.4.2
 - **WiFi SSID**: PumpedMMP
 - **Password**: 00000000
 
@@ -37,7 +37,7 @@ Add at the end:
 
 ```
 interface wlan0
-static ip_address=192.168.4.2/24
+static ip_address=192.168.4.3/24
 static routers=192.168.4.1
 static domain_name_servers=192.168.4.1 8.8.8.8
 ```
@@ -51,7 +51,7 @@ sudo reboot
 #### Configure Printer Static IP
 
 Use your printer's network settings menu to configure:
-- IP Address: 192.168.4.3
+- IP Address: 192.168.4.2
 - Subnet Mask: 255.255.255.0
 - Gateway: 192.168.4.1
 
@@ -218,11 +218,11 @@ python -c "import websocket_ipc; print('OK')"
 
 ```bash
 # Verify network connectivity
-ping 192.168.4.3
+ping 192.168.4.2
 
 # Test printer communication directly
 cd ~/multi-material-printer/src/controller
-python printer_comms.py -i 192.168.4.3 -c getstatus
+python printer_comms.py -i 192.168.4.2 -c getstatus
 ```
 
 ### Print Manager Not Connecting to Web App

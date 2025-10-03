@@ -22,8 +22,8 @@ sudo systemctl restart scion-mmu-print-manager.service
 | Device           | IP Address     | Port | Notes                    |
 |------------------|----------------|------|--------------------------|
 | ESP32 Gateway    | 192.168.4.1    | -    | WiFi access point        |
-| Raspberry Pi     | 192.168.4.2    | 5000 | Static IP required       |
-| Anycubic Printer | 192.168.4.3    | 6000 | Static IP required       |
+| Raspberry Pi     | 192.168.4.3    | 5000 | Static IP required       |
+| Anycubic Printer | 192.168.4.2    | 6000 | Static IP required       |
 
 **WiFi Network:**
 - SSID: `PumpedMMP`
@@ -31,7 +31,7 @@ sudo systemctl restart scion-mmu-print-manager.service
 
 ## Web Interface
 
-Access at: `http://192.168.4.2:5000`
+Access at: `http://<pi-IP>:5000`
 
 **Pages:**
 - `/` - Dashboard (status and quick actions)
@@ -59,16 +59,16 @@ source ../../venv/bin/activate
 python printer_comms.py --auto-connect
 
 # Get status
-python printer_comms.py -i 192.168.4.3 -c getstatus
+python printer_comms.py -i 192.168.4.2 -c getstatus
 
 # Get file list
-python printer_comms.py -i 192.168.4.3 -c getfile
+python printer_comms.py -i 192.168.4.2 -c getfile
 
 # Pause print
-python printer_comms.py -i 192.168.4.3 -c gopause
+python printer_comms.py -i 192.168.4.2 -c gopause
 
 # Resume print
-python printer_comms.py -i 192.168.4.3 -c goresume
+python printer_comms.py -i 192.168.4.2 -c goresume
 ```
 
 ### Pump Control
@@ -141,7 +141,7 @@ python -c "import flask_socketio; print('OK')"
 
 ```bash
 # Test network
-ping 192.168.4.3
+ping 192.168.4.2
 
 # Check WiFi connection
 iwconfig wlan0
