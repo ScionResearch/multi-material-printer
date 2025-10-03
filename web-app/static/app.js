@@ -105,6 +105,7 @@ function initializeSocket() {
                 logContainer.scrollTop = logContainer.scrollHeight;
             }
         });
+        socket.on('file_list_response', handleFileListResponse);
         socket.on('status_update', function(data) {
             if (data.component === 'WEBSOCKET') {
                 if (data.status && data.status.toLowerCase().includes('connected')) {
@@ -1168,40 +1169,111 @@ loadSavedTheme();
 // ==========================================
 
 let selectedPrintFile = null;
+let pendingFileRequestId = null;
+let pendingFileRequestTimer = null;
+
+function processFileListResult(result) {
+    const { success, files = [], message = '' } = result || {};
+    const loadingDiv = document.getElementById('print-files-loading');
+    const listDiv = document.getElementById('print-files-list');
+    const emptyDiv = document.getElementById('print-files-empty');
+    const errorDiv = document.getElementById('print-files-error');
+    const refreshBtn = document.getElementById('refresh-files-btn');
+
+    if (pendingFileRequestTimer) {
+        clearTimeout(pendingFileRequestTimer);
+        pendingFileRequestTimer = null;
+    }
+    pendingFileRequestId = null;
+
+    if (loadingDiv) {
+        loadingDiv.style.display = 'none';
+    }
+    if (refreshBtn) {
+        refreshBtn.disabled = false;
+    }
+
+    hideAllFileStates();
+    clearFileSelection();
+
+    if (!success) {
+        showFileError(message || 'Failed to load print files');
+        return;
+    }
+
+    if (Array.isArray(files) && files.length > 0) {
+        displayPrintFiles(files);
+        if (listDiv) {
+            listDiv.style.display = 'block';
+        }
+    } else {
+        if (emptyDiv) {
+            emptyDiv.style.display = 'block';
+        }
+    }
+
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+    }
+}
+
+function handleFileListResponse(event) {
+    if (!event || typeof event !== 'object') {
+        return;
+    }
+
+    const commandId = event.command_id || event.commandId || null;
+    if (pendingFileRequestId && commandId && commandId !== pendingFileRequestId) {
+        return;
+    }
+
+    processFileListResult({
+        success: Boolean(event.success),
+        files: Array.isArray(event.files) ? event.files : [],
+        message: event.message || ''
+    });
+}
 
 // Refresh print files list
 async function refreshPrintFiles() {
     const loadingDiv = document.getElementById('print-files-loading');
-    const emptyDiv = document.getElementById('print-files-empty');
-    const errorDiv = document.getElementById('print-files-error');
-    const listDiv = document.getElementById('print-files-list');
     const refreshBtn = document.getElementById('refresh-files-btn');
 
     // Show loading state
     hideAllFileStates();
-    loadingDiv.style.display = 'block';
-    refreshBtn.disabled = true;
+    if (loadingDiv) {
+        loadingDiv.style.display = 'block';
+    }
+    if (refreshBtn) {
+        refreshBtn.disabled = true;
+    }
 
     try {
         const response = await fetch('/api/printer/files');
         const result = await response.json();
 
         if (result.success) {
-            if (result.files && result.files.length > 0) {
-                displayPrintFiles(result.files);
-                listDiv.style.display = 'block';
+            if (Array.isArray(result.files)) {
+                processFileListResult({ success: true, files: result.files });
+            } else if (result.command_id) {
+                pendingFileRequestId = result.command_id;
+                if (pendingFileRequestTimer) {
+                    clearTimeout(pendingFileRequestTimer);
+                }
+                pendingFileRequestTimer = setTimeout(() => {
+                    if (pendingFileRequestId === result.command_id) {
+                        processFileListResult({ success: false, message: 'Timed out waiting for printer response' });
+                    }
+                }, 10000);
             } else {
-                emptyDiv.style.display = 'block';
+                processFileListResult({ success: false, message: 'Printer did not provide file data' });
             }
         } else {
-            showFileError(result.message || 'Failed to load print files');
+            processFileListResult({ success: false, message: result.message });
         }
     } catch (error) {
         console.error('Error fetching print files:', error);
-        showFileError('Network error: Could not connect to printer');
-    } finally {
-        loadingDiv.style.display = 'none';
-        refreshBtn.disabled = false;
+        processFileListResult({ success: false, message: 'Network error: Could not connect to printer' });
     }
 }
 
@@ -1247,11 +1319,19 @@ function createFileCard(file) {
             </div>
         </div>
         <div class="card-footer p-2 d-none file-actions">
-            <button class="btn btn-success btn-sm w-100" onclick="event.stopPropagation(); startPrintFile('${file.name}')">
+            <button class="btn btn-success btn-sm w-100 file-start-btn">
                 <i class="bi bi-play-fill"></i> Start Print
             </button>
         </div>
     `;
+
+    const startButton = cardDiv.querySelector('.file-start-btn');
+    if (startButton) {
+        startButton.addEventListener('click', (event) => {
+            event.stopPropagation();
+            startPrintFile(file.internal_name || file.name, file.name);
+        });
+    }
 
     colDiv.appendChild(cardDiv);
     return colDiv;
@@ -1295,7 +1375,10 @@ function clearFileSelection() {
         card.classList.remove('border-success', 'bg-light');
         card.querySelector('.file-actions')?.classList.add('d-none');
     });
-    document.getElementById('selected-file-info').style.display = 'none';
+    const infoDiv = document.getElementById('selected-file-info');
+    if (infoDiv) {
+        infoDiv.style.display = 'none';
+    }
 }
 
 // Start printing selected file
@@ -1305,12 +1388,15 @@ async function startSelectedPrint() {
         return;
     }
 
-    await startPrintFile(selectedPrintFile.name);
+    const filename = selectedPrintFile.internal_name || selectedPrintFile.name;
+    await startPrintFile(filename, selectedPrintFile.name);
 }
 
 // Start printing a specific file
-async function startPrintFile(filename) {
-    if (!confirm(`Start printing "${filename}"?\n\nThis will begin the print job on the printer.`)) {
+async function startPrintFile(filename, displayName = null) {
+    const visibleName = displayName || filename;
+
+    if (!confirm(`Start printing "${visibleName}"?\n\nThis will begin the print job on the printer.`)) {
         return;
     }
 
@@ -1332,7 +1418,7 @@ async function startPrintFile(filename) {
         const result = await response.json();
 
         if (result.success) {
-            showAlert(`Print started: ${filename}`, 'success');
+            showAlert(`Print started: ${visibleName}`, 'success');
             clearFileSelection();
         } else {
             showAlert(`Failed to start print: ${result.message}`, 'danger');
@@ -1355,10 +1441,15 @@ function showUploadModal() {
 
 // Helper functions
 function hideAllFileStates() {
-    document.getElementById('print-files-loading').style.display = 'none';
-    document.getElementById('print-files-empty').style.display = 'none';
-    document.getElementById('print-files-error').style.display = 'none';
-    document.getElementById('print-files-list').style.display = 'none';
+    const loading = document.getElementById('print-files-loading');
+    const empty = document.getElementById('print-files-empty');
+    const errorDiv = document.getElementById('print-files-error');
+    const list = document.getElementById('print-files-list');
+
+    if (loading) loading.style.display = 'none';
+    if (empty) empty.style.display = 'none';
+    if (errorDiv) errorDiv.style.display = 'none';
+    if (list) list.style.display = 'none';
 }
 
 function showFileError(message) {

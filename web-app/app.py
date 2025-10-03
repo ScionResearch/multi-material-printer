@@ -1017,6 +1017,11 @@ def handle_status_update_from_manager(data):
         'data': data.get('data', {})
     }, broadcast=True, include_self=False)
 
+@socketio.on('file_list_response')
+def handle_file_list_response_from_manager(data):
+    """Forward file list responses from print manager to all web clients."""
+    emit('file_list_response', data, broadcast=True, include_self=False)
+
 @socketio.on('log_message')
 def handle_log_message_from_manager(data):
     """Handle log messages from print manager"""

@@ -38,6 +38,7 @@ import json
 import configparser
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from enum import Enum
 from dataclasses import dataclass
@@ -452,11 +453,15 @@ class PrintManager:
             logger.info(f"Received WebSocket command: {command_type} ({command_id})")
 
             # Process the command using existing handler (adapt to expected format)
-            command_dict = {"command": command_type, "parameters": parameters}
+            command_dict = {
+                "command": command_type,
+                "parameters": parameters,
+                "command_id": command_id
+            }
             success = self._process_shared_command(command_dict)
 
             # Send result back via WebSocket
-            if self.websocket_client:
+            if self.websocket_client and command_id:
                 self.websocket_client.mark_command_processed(
                     command_id,
                     success=success,
@@ -526,7 +531,11 @@ class PrintManager:
                     # Process any queued commands from WebSocket
                     command = self.websocket_client.get_next_command(timeout=0.1)
                     if command:
-                        command_dict = {"command": command['command_type'], "parameters": command.get('parameters', {})}
+                        command_dict = {
+                            "command": command['command_type'],
+                            "parameters": command.get('parameters', {}),
+                            "command_id": command.get('command_id')
+                        }
                         success = self._process_shared_command(command_dict)
                         self.websocket_client.mark_command_processed(
                             command['command_id'],
@@ -852,8 +861,13 @@ class PrintManager:
 
     def _process_shared_command(self, command):
         """Process commands from shared status system."""
-        cmd_type = command["command"]
-        params = command.get("parameters", {})
+        cmd_type = command.get("command") if command else None
+        params = command.get("parameters", {}) if command else {}
+        command_id = command.get("command_id") if command else None
+
+        if not cmd_type:
+            self._send_status_update("COMMAND", "Received malformed command payload", level="error")
+            return False
 
         if cmd_type == "start_multi_material":
             recipe_path = params.get("recipe_path")
@@ -898,6 +912,83 @@ class PrintManager:
                     self._send_status_update("SEQUENCE", f"Material change sequence to {target_material} failed", level="error")
             else:
                 self._send_status_update("SEQUENCE", "Invalid material change parameters or MMU control not available", level="error")
+        elif cmd_type == "get_files":
+            files = []
+            success = False
+            error_message = None
+
+            if printer_comms:
+                try:
+                    files = printer_comms.get_files(self.printer_ip)
+                    success = True
+                except Exception as exc:
+                    error_message = str(exc)
+                    self._send_status_update(
+                        "FILES",
+                        f"File retrieval failed: {error_message}",
+                        level="error"
+                    )
+            else:
+                error_message = "Printer communication module unavailable"
+                self._send_status_update("FILES", error_message, level="error")
+
+            if success:
+                self._send_status_update(
+                    "FILES",
+                    f"Retrieved {len(files)} file(s) from printer",
+                    {"file_count": len(files)}
+                )
+
+            if self.websocket_client and self.websocket_client.is_connected():
+                payload = {
+                    "command_id": command_id,
+                    "success": success,
+                    "files": files,
+                    "message": error_message or f"Retrieved {len(files)} files",
+                    "timestamp": datetime.now().isoformat()
+                }
+                try:
+                    self.websocket_client.emit('file_list_response', payload)
+                except Exception as exc:
+                    logger.warning(f"Failed to emit file list response: {exc}")
+
+            return success
+        elif cmd_type == "start_printer_print":
+            filename = params.get('filename')
+            if not filename:
+                self._send_status_update("PRINTER", "Start print failed: filename not provided", level="error")
+                return False
+
+            if not printer_comms:
+                self._send_status_update("PRINTER", "Start print failed: printer communication module unavailable", level="error")
+                return False
+
+            try:
+                started = printer_comms.start_print(filename, self.printer_ip)
+            except Exception as exc:
+                self._send_status_update(
+                    "PRINTER",
+                    f"Start print encountered an error: {exc}",
+                    {"filename": filename},
+                    level="error"
+                )
+                return False
+
+            if started:
+                self._send_status_update(
+                    "PRINTER",
+                    f"Printer start initiated for {filename}",
+                    {"filename": filename}
+                )
+                return True
+
+            self._send_status_update(
+                "PRINTER",
+                f"Printer rejected start request for {filename}",
+                {"filename": filename},
+                level="error"
+            )
+            return False
         elif cmd_type == "test_i2c":
             # Test I2C communication with motor controllers
             self._send_status_update("DIAGNOSTICS", "Starting I2C communication test...")
