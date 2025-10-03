@@ -164,6 +164,7 @@ class PrintManager:
         self.state = PrintManagerState.IDLE
         self.recipe: Dict[int, str] = {}
         self._last_processed_layer: Optional[int] = None
+        self._recipe_active = False  # Flag to control recipe-based material changes
 
         # Threading and communication
         self._monitor_thread: Optional[threading.Thread] = None
@@ -593,8 +594,8 @@ class PrintManager:
                     # Still update shared status even if not logging
                     self._send_status_update("MONITOR", "Layer monitoring update", layer_data)
 
-                # Check for material changes
-                if current_layer in self.recipe and current_layer != self._last_processed_layer:
+                # Check for material changes (only if recipe is active)
+                if self._recipe_active and current_layer in self.recipe and current_layer != self._last_processed_layer:
                     material = self.recipe[current_layer]
                     self._material_change_count += 1
 
@@ -873,10 +874,11 @@ class PrintManager:
             recipe_path = params.get("recipe_path")
             if recipe_path and os.path.exists(recipe_path):
                 self.load_recipe(recipe_path)
-                self._send_status_update("COMMAND", f"Loaded recipe: {recipe_path}")
+                self._recipe_active = True
+                self._send_status_update("COMMAND", f"Recipe activated: {recipe_path}")
         elif cmd_type == "stop_multi_material":
-            self._stop_event.set()
-            self._send_status_update("COMMAND", "Stop command received")
+            self._recipe_active = False
+            self._send_status_update("COMMAND", "Recipe deactivated - material changes disabled")
         elif cmd_type == "emergency_stop":
             self._stop_event.set()
             self._send_status_update("COMMAND", "Emergency stop activated", level="warning")
