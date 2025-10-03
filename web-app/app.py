@@ -176,7 +176,6 @@ def get_default_pump_config():
             "pump_a": {
                 "name": "Pump A",
                 "description": "Primary material pump",
-                "gpio_pin": 18,
                 "flow_rate_ml_per_second": 2.5,
                 "max_volume_ml": 500,
                 "calibration": {"steps_per_ml": 100, "last_calibrated": None}
@@ -184,7 +183,6 @@ def get_default_pump_config():
             "pump_b": {
                 "name": "Pump B",
                 "description": "Secondary material pump",
-                "gpio_pin": 19,
                 "flow_rate_ml_per_second": 2.5,
                 "max_volume_ml": 500,
                 "calibration": {"steps_per_ml": 100, "last_calibrated": None}
@@ -192,7 +190,6 @@ def get_default_pump_config():
             "pump_c": {
                 "name": "Pump C",
                 "description": "Third material pump",
-                "gpio_pin": 21,
                 "flow_rate_ml_per_second": 2.5,
                 "max_volume_ml": 500,
                 "calibration": {"steps_per_ml": 100, "last_calibrated": None}
@@ -200,7 +197,6 @@ def get_default_pump_config():
             "drain_pump": {
                 "name": "Drain Pump",
                 "description": "Vat drainage pump",
-                "gpio_pin": 20,
                 "flow_rate_ml_per_second": 5.0,
                 "max_volume_ml": 1000,
                 "calibration": {"steps_per_ml": 80, "last_calibrated": None}
@@ -777,13 +773,11 @@ def validate_pump_config(config):
 
         # Validate pump entries
         for pump_id, pump_data in config['pumps'].items():
-            required_pump_keys = ['name', 'description', 'gpio_pin', 'flow_rate_ml_per_second', 'max_volume_ml', 'calibration']
+            required_pump_keys = ['name', 'description', 'flow_rate_ml_per_second', 'max_volume_ml', 'calibration']
             if not all(key in pump_data for key in required_pump_keys):
                 return False
 
             # Validate data types
-            if not isinstance(pump_data['gpio_pin'], int):
-                return False
             if not isinstance(pump_data['flow_rate_ml_per_second'], (int, float)):
                 return False
             if not isinstance(pump_data['max_volume_ml'], (int, float)):

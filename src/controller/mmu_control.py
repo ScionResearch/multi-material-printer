@@ -64,9 +64,26 @@ class MMUController:
             # Return default configuration
             return {
                 "pumps": {
-                    "pump_a": {"name": "Pump A", "gpio_pin": 18},
-                    "pump_b": {"name": "Pump B", "gpio_pin": 19},
-                    "drain_pump": {"name": "Drain Pump", "gpio_pin": 20}
+                    "pump_a": {
+                        "name": "Pump A",
+                        "flow_rate_ml_per_second": 2.5,
+                        "max_volume_ml": 500
+                    },
+                    "pump_b": {
+                        "name": "Pump B",
+                        "flow_rate_ml_per_second": 2.5,
+                        "max_volume_ml": 500
+                    },
+                    "pump_c": {
+                        "name": "Pump C",
+                        "flow_rate_ml_per_second": 2.5,
+                        "max_volume_ml": 500
+                    },
+                    "drain_pump": {
+                        "name": "Drain Pump",
+                        "flow_rate_ml_per_second": 5.0,
+                        "max_volume_ml": 1000
+                    }
                 },
                 "material_change": {
                     "drain_volume_ml": 50,

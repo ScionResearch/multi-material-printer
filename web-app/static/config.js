@@ -93,19 +93,15 @@ function createPumpConfigCard(pumpId, pumpData) {
                 </div>
             </div>
             <div class="row mt-2">
-                <div class="col-md-3">
-                    <label class="form-label">GPIO Pin</label>
-                    <input type="number" class="form-control" data-pump="${pumpId}" data-field="gpio_pin" value="${pumpData.gpio_pin}" min="1" max="40">
-                </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label class="form-label">Flow Rate (ml/s)</label>
                     <input type="number" class="form-control" data-pump="${pumpId}" data-field="flow_rate_ml_per_second" value="${pumpData.flow_rate_ml_per_second}" min="0.1" max="10" step="0.1">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label class="form-label">Max Volume (ml)</label>
                     <input type="number" class="form-control" data-pump="${pumpId}" data-field="max_volume_ml" value="${pumpData.max_volume_ml}" min="10" max="2000">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label class="form-label">Steps per ml</label>
                     <input type="number" class="form-control" data-pump="${pumpId}" data-field="steps_per_ml" value="${pumpData.calibration.steps_per_ml}" min="1" max="1000">
                 </div>
@@ -135,7 +131,7 @@ async function savePumpConfig() {
             let value = input.value;
 
             // Convert to appropriate type
-            if (field === 'gpio_pin' || field === 'max_volume_ml' || field === 'steps_per_ml') {
+            if (field === 'max_volume_ml' || field === 'steps_per_ml') {
                 value = parseInt(value);
             } else if (field === 'flow_rate_ml_per_second') {
                 value = parseFloat(value);
