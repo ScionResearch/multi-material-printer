@@ -449,142 +449,51 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<div id="initial-status-data" data-status='{{ status|tojson|safe }}' hidden></div>
 <script>
-// Dashboard-specific JavaScript functions
-function startMultiMaterial() {
-    showAlert('Starting multi-material printing...', 'info');
-    // This will be implemented to start the print_manager.py process
-    fetch('/api/multi-material/start', {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showAlert('Multi-material printing started successfully', 'success');
-            } else {
-                showAlert('Failed to start multi-material printing: ' + data.message, 'danger');
+// Dashboard-specific helpers built on the shared logic in static/app.js
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.ScionApp) {
+        const statusElement = document.getElementById('initial-status-data');
+        const payload = statusElement ? statusElement.dataset.status : null;
+        if (payload) {
+            try {
+                const snapshot = JSON.parse(payload);
+                window.ScionApp.applyStatusSnapshot(snapshot);
+            } catch (error) {
+                console.warn('Unable to parse initial status snapshot', error);
             }
-        })
-        .catch(error => {
-            showAlert('Error starting multi-material printing: ' + error, 'danger');
-        });
-}
-
-function stopMultiMaterial() {
-    showAlert('Stopping multi-material printing...', 'warning');
-    // This will be implemented to stop the print_manager.py process
-    fetch('/api/multi-material/stop', {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showAlert('Multi-material printing stopped', 'warning');
-            } else {
-                showAlert('Failed to stop multi-material printing: ' + data.message, 'danger');
-            }
-        });
-}
-
-function printerControl(action) {
-    const actionText = action.charAt(0).toUpperCase() + action.slice(1);
-    showAlert(`${actionText}ing printer...`, 'info');
-
-    fetch(`/api/printer/${action}`, {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showAlert(`Printer ${action}d successfully`, 'success');
-            } else {
-                showAlert(`Failed to ${action} printer: ${data.message}`, 'danger');
-            }
-        })
-        .catch(error => {
-            showAlert(`Error ${action}ing printer: ${error}`, 'danger');
-        });
-}
+        }
+        window.ScionApp.renderDashboard();
+    }
+});
 
 function refreshStatus() {
     fetch('/api/status')
         .then(response => response.json())
-        .then(data => updateStatus(data))
+        .then(snapshot => {
+            if (window.ScionApp) {
+                window.ScionApp.applyStatusSnapshot(snapshot);
+                window.ScionApp.renderDashboard();
+            }
+            addLogEntry('Status snapshot refreshed');
+        })
         .catch(error => {
             showAlert('Error refreshing status: ' + error, 'danger');
         });
 }
 
-function updateStatus(status) {
-    // Update printer status
-    document.getElementById('printer-status').innerHTML =
-        `<span class="badge ${getStatusColor(status.printer_status)}">${status.printer_status}</span>`;
-
-    // Update current layer
-    document.getElementById('current-layer').textContent = status.current_layer;
-
-    // Update progress bar
-    const progressBar = document.getElementById('progress-bar');
-    const progressText = document.getElementById('progress-text');
-    progressBar.style.width = status.progress_percent + '%';
-    progressText.textContent = status.progress_percent.toFixed(1) + '%';
-
-    // Update material info
-    document.getElementById('current-material').innerHTML =
-        `<span class="badge bg-info">${status.current_material}</span>`;
-
-    document.getElementById('next-change').innerHTML =
-        `Material <strong>${status.next_material}</strong> at layer <strong>${status.next_change_layer}</strong>`;
-
-    // Update connection status
-    const connectionBadge = document.getElementById('printer-connection');
-    if (status.printer_connected) {
-        connectionBadge.className = 'badge bg-success';
-        connectionBadge.textContent = 'Connected';
-    } else {
-        connectionBadge.className = 'badge bg-danger';
-        connectionBadge.textContent = 'Disconnected';
-    }
-
-    // Update MM status
-    const mmStatus = document.getElementById('mm-status');
-    mmStatus.innerHTML = status.mm_active ?
-        '<span class="badge bg-success">Active</span>' :
-        '<span class="badge bg-secondary">Stopped</span>';
-
-    // Update last update time
-    document.getElementById('last-update').textContent = status.last_update;
-
-    // Update recipe table status
-    updateRecipeTable(status.current_layer, status.next_change_layer);
-}
-
-function updateRecipeTable(currentLayer, nextChangeLayer) {
-    const rows = document.querySelectorAll('#recipe-table tr');
-    rows.forEach(row => {
-        const layer = parseInt(row.dataset.layer);
-        const statusCell = row.querySelector('td:last-child');
-
-        if (layer <= currentLayer) {
-            statusCell.innerHTML = '<span class="badge bg-success">Completed</span>';
-        } else if (layer === nextChangeLayer) {
-            statusCell.innerHTML = '<span class="badge bg-warning">Next</span>';
-        } else {
-            statusCell.innerHTML = '<span class="badge bg-light text-dark">Pending</span>';
-        }
-    });
-}
-
-function getStatusColor(status) {
-    switch(status.toLowerCase()) {
-        case 'printing': return 'bg-success';
-        case 'paused': return 'bg-warning';
-        case 'stopped': return 'bg-danger';
-        case 'idle': return 'bg-info';
-        default: return 'bg-secondary';
-    }
-}
-
 function addLogEntry(message, type = 'info') {
     const log = document.getElementById('activity-log');
+    if (!log) {
+        return;
+    }
+
     const timestamp = new Date().toLocaleTimeString();
-    const typeClass = type === 'error' ? 'text-danger' :
-                     type === 'warning' ? 'text-warning' :
-                     type === 'success' ? 'text-success' : 'text-info';
+    const typeClass = type === 'error' ? 'text-danger'
+        : type === 'warning' ? 'text-warning'
+        : type === 'success' ? 'text-success'
+        : 'text-info';
 
     const entry = document.createElement('div');
     entry.className = `log-entry ${typeClass}`;
@@ -593,7 +502,6 @@ function addLogEntry(message, type = 'info') {
     log.appendChild(entry);
     log.scrollTop = log.scrollHeight;
 
-    // Keep only last 100 entries
     const entries = log.querySelectorAll('.log-entry');
     if (entries.length > 100) {
         entries[0].remove();
@@ -602,17 +510,29 @@ function addLogEntry(message, type = 'info') {
 
 // Socket.IO event handlers specific to dashboard
 socket.on('status_update', function(data) {
-    updateStatus(data);
-    addLogEntry(`Status update: Layer ${data.current_layer}, ${data.printer_status}`);
-});
+    if (!data || typeof data !== 'object') {
+        return;
+    }
 
-socket.on('material_change', function(data) {
-    addLogEntry(`Material change: ${data.from_material} → ${data.to_material} at layer ${data.layer}`, 'success');
+    if (data.component) {
+        const detail = data.status ? `: ${data.status}` : '';
+        addLogEntry(`${data.component}${detail}`);
+    }
 });
 
 socket.on('system_error', function(data) {
+    if (!data) {
+        return;
+    }
     addLogEntry(`Error: ${data.message}`, 'error');
     showAlert('System error: ' + data.message, 'danger');
+});
+
+socket.on('material_change', function(data) {
+    if (!data) {
+        return;
+    }
+    addLogEntry(`Material change: ${data.from_material} → ${data.to_material} at layer ${data.layer}`, 'success');
 });
 </script>
 {% endblock %}

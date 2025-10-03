@@ -929,6 +929,14 @@ def handle_connect():
         connected_clients['web_clients'].add(sid)
     emit('status_update', current_status)
 
+    # Immediately inform the new client of the controller connection state so
+    # the UI can render an accurate indicator without waiting for another
+    # heartbeat from the print manager.
+    emit('system_status', {
+        'print_manager_connected': connected_clients['print_manager'] is not None,
+        'timestamp': datetime.now().isoformat()
+    }, to=sid)
+
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""

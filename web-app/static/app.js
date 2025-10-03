@@ -5,6 +5,26 @@ let socket = null;
 let connectionStatus = 'disconnected';
 let backendStatus = 'offline';
 
+// Dashboard view-model used to render the status cards without dumping raw JSON
+const dashboardState = {
+    printer: {
+        status: 'Unknown',
+        connected: false,
+        currentLayer: 0,
+        progressPercent: 0,
+        currentMaterial: 'None',
+        nextMaterial: 'None',
+        nextChangeLayer: 0,
+        mmActive: false
+    },
+    sequence: {
+        currentStep: 0,
+        totalSteps: 0,
+        stepName: ''
+    },
+    lastUpdate: null
+};
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     initializeSocket();
@@ -140,6 +160,325 @@ function updateBackendIndicator() {
         indicator.className = 'badge bg-secondary';
         indicator.innerHTML = '<i class="bi bi-cpu"></i> Controller Unknown';
         document.body.classList.add('controller-offline');
+    }
+}
+
+function toInt(value, fallback = null) {
+    const parsed = parseInt(value, 10);
+    return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function toFloat(value, fallback = null) {
+    const parsed = parseFloat(value);
+    return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+function normalizePrinterStatusValue(raw) {
+    if (raw === undefined || raw === null) {
+        return null;
+    }
+    let text = String(raw);
+    if (text.toLowerCase().startsWith('printer status')) {
+        const parts = text.split(':');
+        text = parts.length > 1 ? parts.slice(1).join(':') : parts[0];
+    }
+    return text.trim() || null;
+}
+
+function applyStatusSnapshot(snapshot) {
+    if (!snapshot || typeof snapshot !== 'object') {
+        return;
+    }
+
+    const printer = dashboardState.printer;
+
+    const statusValue = normalizePrinterStatusValue(snapshot.printer_status);
+    if (statusValue) {
+        printer.status = statusValue;
+    }
+
+    if (snapshot.printer_connected !== undefined) {
+        printer.connected = Boolean(snapshot.printer_connected);
+    }
+
+    if (snapshot.current_layer !== undefined) {
+        const layer = toInt(snapshot.current_layer, printer.currentLayer);
+        if (layer !== null) {
+            printer.currentLayer = layer;
+        }
+    }
+
+    if (snapshot.progress_percent !== undefined) {
+        const progress = toFloat(snapshot.progress_percent, printer.progressPercent);
+        if (progress !== null) {
+            printer.progressPercent = progress;
+        }
+    }
+
+    if (snapshot.current_material) {
+        printer.currentMaterial = snapshot.current_material;
+    }
+
+    if (snapshot.next_material !== undefined) {
+        printer.nextMaterial = snapshot.next_material || 'None';
+    }
+
+    if (snapshot.next_change_layer !== undefined) {
+        const nextLayer = toInt(snapshot.next_change_layer, printer.nextChangeLayer);
+        if (nextLayer !== null) {
+            printer.nextChangeLayer = nextLayer;
+        }
+    }
+
+    if (snapshot.mm_active !== undefined) {
+        printer.mmActive = Boolean(snapshot.mm_active);
+    }
+
+    if (snapshot.last_update) {
+        dashboardState.lastUpdate = snapshot.last_update;
+    }
+
+    if (snapshot.sequence_progress) {
+        const seq = snapshot.sequence_progress;
+        const currentStep = toInt(seq.current_step, dashboardState.sequence.currentStep) ?? dashboardState.sequence.currentStep;
+        const totalSteps = toInt(seq.total_steps, dashboardState.sequence.totalSteps) ?? dashboardState.sequence.totalSteps;
+        dashboardState.sequence.currentStep = currentStep;
+        dashboardState.sequence.totalSteps = totalSteps;
+        dashboardState.sequence.stepName = seq.step_name || dashboardState.sequence.stepName;
+    }
+}
+
+function handleStatusEvent(event) {
+    if (!event || typeof event !== 'object') {
+        return;
+    }
+
+    const printer = dashboardState.printer;
+    const payload = event.data || {};
+
+    if (event.timestamp) {
+        dashboardState.lastUpdate = event.timestamp;
+    }
+
+    switch (event.component) {
+        case 'PRINTER_STATUS': {
+            const statusValue = normalizePrinterStatusValue(payload.printer_status ?? event.status);
+            if (statusValue) {
+                printer.status = statusValue;
+            }
+            if (payload.printer_connected !== undefined) {
+                printer.connected = Boolean(payload.printer_connected);
+            }
+            break;
+        }
+        case 'PROGRESS':
+        case 'MONITOR': {
+            if (payload.current_layer !== undefined) {
+                const layer = toInt(payload.current_layer, printer.currentLayer);
+                if (layer !== null) {
+                    printer.currentLayer = layer;
+                }
+            }
+            const statusValue = normalizePrinterStatusValue(payload.printer_status ?? event.status);
+            if (statusValue) {
+                printer.status = statusValue;
+            }
+            if (payload.printer_connected !== undefined) {
+                printer.connected = Boolean(payload.printer_connected);
+            }
+            if (payload.percent_complete !== undefined) {
+                const progress = toFloat(payload.percent_complete, printer.progressPercent);
+                if (progress !== null) {
+                    printer.progressPercent = progress;
+                }
+            }
+            break;
+        }
+        case 'MATERIAL': {
+            if (payload.material) {
+                printer.currentMaterial = payload.material;
+            }
+            if (payload.next_material !== undefined) {
+                printer.nextMaterial = payload.next_material || printer.nextMaterial;
+            }
+            if (payload.next_layer !== undefined) {
+                const nextLayer = toInt(payload.next_layer, printer.nextChangeLayer);
+                if (nextLayer !== null) {
+                    printer.nextChangeLayer = nextLayer;
+                }
+            }
+            break;
+        }
+        case 'SEQUENCE': {
+            if (payload.current_step !== undefined || payload.total_steps !== undefined) {
+                const currentStep = toInt(payload.current_step, dashboardState.sequence.currentStep) ?? dashboardState.sequence.currentStep;
+                const totalSteps = toInt(payload.total_steps, dashboardState.sequence.totalSteps) ?? dashboardState.sequence.totalSteps;
+                dashboardState.sequence.currentStep = currentStep;
+                dashboardState.sequence.totalSteps = totalSteps;
+                dashboardState.sequence.stepName = payload.step_name || dashboardState.sequence.stepName;
+            }
+            break;
+        }
+        case 'COMMAND': {
+            if (event.status) {
+                const text = event.status.toLowerCase();
+                if (text.includes('start')) {
+                    printer.mmActive = true;
+                }
+                if (text.includes('stop') || text.includes('completed')) {
+                    printer.mmActive = false;
+                }
+            }
+            break;
+        }
+        case 'EXPERIMENT': {
+            if (event.status && event.status.toLowerCase().includes('completed')) {
+                printer.mmActive = false;
+            }
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+function formatPrinterStatusLabel(rawStatus) {
+    const normalized = normalizePrinterStatusValue(rawStatus) || 'Unknown';
+    const upper = normalized.toUpperCase();
+    const known = {
+        STOPPRN: 'Stopped',
+        PRINTING: 'Printing',
+        PAUSE: 'Paused',
+        PAUSED: 'Paused',
+        IDLE: 'Idle',
+        READY: 'Ready'
+    };
+    if (known[upper]) {
+        return known[upper];
+    }
+    if (upper.length > 24) {
+        return upper.slice(0, 21) + '...';
+    }
+    return normalized.replace(/_/g, ' ');
+}
+
+function getPrinterStatusBadgeClass(status) {
+    const normalized = normalizePrinterStatusValue(status);
+    if (!normalized) {
+        return 'bg-secondary';
+    }
+    const lower = normalized.toLowerCase();
+    if (lower.includes('print')) {
+        return 'bg-success';
+    }
+    if (lower.includes('pause')) {
+        return 'bg-warning text-dark';
+    }
+    if (lower.includes('stop') || lower.includes('error') || lower.includes('fail')) {
+        return 'bg-danger';
+    }
+    if (lower.includes('idle') || lower.includes('ready')) {
+        return 'bg-info';
+    }
+    return 'bg-secondary';
+}
+
+function updateRecipeTableHighlights(currentLayer, nextChangeLayer) {
+    const rows = document.querySelectorAll('#recipe-table tr');
+    if (!rows.length) {
+        return;
+    }
+
+    const current = toInt(currentLayer, 0) ?? 0;
+    const next = toInt(nextChangeLayer, 0) ?? 0;
+
+    rows.forEach(row => {
+        const layerAttr = toInt(row.getAttribute('data-layer'), null);
+        if (layerAttr === null) {
+            return;
+        }
+        const statusCell = row.querySelector('td:nth-child(4)');
+        if (!statusCell) {
+            return;
+        }
+
+        if (current > 0 && layerAttr <= current) {
+            statusCell.innerHTML = '<span class="badge bg-success">Completed</span>';
+        } else if (next > 0 && layerAttr === next) {
+            statusCell.innerHTML = '<span class="badge bg-warning text-dark">Next</span>';
+        } else {
+            statusCell.innerHTML = '<span class="badge bg-light text-dark">Pending</span>';
+        }
+    });
+}
+
+function renderDashboard() {
+    const printer = dashboardState.printer;
+
+    const statusEl = document.getElementById('printer-status');
+    if (statusEl) {
+        const label = formatPrinterStatusLabel(printer.status);
+        const badgeClass = getPrinterStatusBadgeClass(printer.status);
+        statusEl.innerHTML = `<span class="badge ${badgeClass}">${label}</span>`;
+    }
+
+    const layerEl = document.getElementById('current-layer');
+    if (layerEl) {
+        layerEl.textContent = printer.currentLayer ?? 0;
+    }
+
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    if (progressBar && progressText) {
+        const progress = Number.isFinite(printer.progressPercent) ? Math.min(100, Math.max(0, printer.progressPercent)) : 0;
+        progressBar.style.width = `${progress}%`;
+        progressText.textContent = `${progress.toFixed(1)}%`;
+    }
+
+    const materialEl = document.getElementById('current-material');
+    if (materialEl) {
+        materialEl.innerHTML = `<span class="badge bg-info">${printer.currentMaterial || 'None'}</span>`;
+    }
+
+    const nextChangeEl = document.getElementById('next-change');
+    if (nextChangeEl) {
+        const nextMaterial = printer.nextMaterial || 'None';
+        const nextLayer = printer.nextChangeLayer || 0;
+        nextChangeEl.innerHTML = `Material <strong>${nextMaterial}</strong> at layer <strong>${nextLayer}</strong>`;
+    }
+
+    const mmStatusEl = document.getElementById('mm-status');
+    if (mmStatusEl) {
+        mmStatusEl.innerHTML = printer.mmActive
+            ? '<span class="badge bg-success">Active</span>'
+            : '<span class="badge bg-secondary">Stopped</span>';
+    }
+
+    const connectionBadge = document.getElementById('printer-connection');
+    if (connectionBadge) {
+        connectionBadge.className = `badge ${printer.connected ? 'bg-success' : 'bg-danger'}`;
+        connectionBadge.textContent = printer.connected ? 'Connected' : 'Disconnected';
+    }
+
+    const lastUpdateEl = document.getElementById('last-update');
+    if (lastUpdateEl && dashboardState.lastUpdate) {
+        lastUpdateEl.textContent = formatTimestamp(dashboardState.lastUpdate);
+    }
+
+    updateRecipeTableHighlights(printer.currentLayer, printer.nextChangeLayer);
+
+    const seqBar = document.getElementById('step-progress-bar');
+    const seqText = document.getElementById('step-progress-text');
+    if (seqBar && seqText) {
+        const { currentStep, totalSteps } = dashboardState.sequence;
+        if (totalSteps > 0) {
+            const percent = Math.min(100, Math.max(0, (currentStep / totalSteps) * 100));
+            seqBar.style.width = `${percent}%`;
+            seqText.textContent = `${currentStep}/${totalSteps}`;
+        } else {
+            seqBar.style.width = '0%';
+            seqText.textContent = '0/0';
+        }
     }
 }
 
@@ -489,6 +828,16 @@ function logPerformance(label) {
 
 // Global status update handler
 function updateGlobalStatus(data) {
+    if (!data) {
+        return;
+    }
+
+    if (data.component !== undefined) {
+        handleStatusEvent(data);
+    } else if (typeof data === 'object') {
+        applyStatusSnapshot(data);
+    }
+
     // Update timing information
     if (data.operation_duration !== undefined) {
         const durationElement = document.getElementById('operation-duration');
@@ -502,7 +851,6 @@ function updateGlobalStatus(data) {
         if (operationElement) {
             operationElement.textContent = data.current_operation || 'idle';
 
-            // Update badge color based on operation
             operationElement.className = 'badge';
             if (data.current_operation === 'idle') {
                 operationElement.classList.add('bg-secondary');
@@ -523,7 +871,6 @@ function updateGlobalStatus(data) {
         }
     }
 
-    // Update pump status indicators
     if (data.pump_status) {
         Object.entries(data.pump_status).forEach(([pumpId, status]) => {
             const statusElement = document.getElementById(`${pumpId}-status`);
@@ -531,8 +878,6 @@ function updateGlobalStatus(data) {
 
             if (statusElement) {
                 statusElement.textContent = status;
-
-                // Update status badge color
                 statusElement.className = 'badge';
                 if (status === 'idle') {
                     statusElement.classList.add('bg-secondary');
@@ -545,7 +890,6 @@ function updateGlobalStatus(data) {
                 }
             }
 
-            // Update pump indicator icon color
             if (indicatorElement) {
                 const icon = indicatorElement.querySelector('i');
                 if (icon) {
@@ -564,7 +908,6 @@ function updateGlobalStatus(data) {
         });
     }
 
-    // Update sequence progress
     if (data.sequence_progress) {
         const progressBar = document.getElementById('step-progress-bar');
         const progressText = document.getElementById('step-progress-text');
@@ -579,7 +922,7 @@ function updateGlobalStatus(data) {
         }
     }
 
-    // Trigger live duration updates
+    renderDashboard();
     startTimerUpdates(data.operation_start_time);
 }
 
@@ -621,7 +964,12 @@ window.ScionApp = {
     enableDebugMode,
     formatTimestamp,
     formatDuration,
-    updateGlobalStatus
+    updateGlobalStatus,
+    applyStatusSnapshot,
+    handleStatusEvent,
+    renderDashboard,
+    updateRecipeTableHighlights,
+    printerControl
 };
 
 // Dashboard Quick Actions
@@ -697,6 +1045,32 @@ async function stopMultiMaterial() {
         console.error('Error stopping multi-material printing:', error);
         showAlert(`Error: ${error.message}`, 'danger');
         button.disabled = false;
+    }
+}
+
+async function printerControl(action) {
+    if (!action) {
+        return;
+    }
+
+    const actionLower = action.toLowerCase();
+    const actionText = actionLower.charAt(0).toUpperCase() + actionLower.slice(1);
+
+    try {
+        showAlert(`${actionText}ing printer...`, 'info');
+
+        const response = await fetch(`/api/printer/${actionLower}`, { method: 'POST' });
+        const result = await response.json();
+
+        if (result.success) {
+            showAlert(`Printer ${actionLower}d successfully`, 'success');
+        } else {
+            throw new Error(result.message || `Failed to ${actionLower} printer`);
+        }
+    } catch (error) {
+        console.error(`Error ${actionLower}ing printer:`, error);
+        const message = error instanceof Error ? error.message : String(error);
+        showAlert(`Error ${actionLower}ing printer: ${message}`, 'danger');
     }
 }
 
