@@ -509,30 +509,39 @@ function addLogEntry(message, type = 'info') {
 }
 
 // Socket.IO event handlers specific to dashboard
-socket.on('status_update', function(data) {
-    if (!data || typeof data !== 'object') {
-        return;
-    }
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait for socket to be initialized by app.js
+    const checkSocket = setInterval(function() {
+        if (window.socket && window.socket.on) {
+            clearInterval(checkSocket);
 
-    if (data.component) {
-        const detail = data.status ? `: ${data.status}` : '';
-        addLogEntry(`${data.component}${detail}`);
-    }
-});
+            socket.on('status_update', function(data) {
+                if (!data || typeof data !== 'object') {
+                    return;
+                }
 
-socket.on('system_error', function(data) {
-    if (!data) {
-        return;
-    }
-    addLogEntry(`Error: ${data.message}`, 'error');
-    showAlert('System error: ' + data.message, 'danger');
-});
+                if (data.component) {
+                    const detail = data.status ? `: ${data.status}` : '';
+                    addLogEntry(`${data.component}${detail}`);
+                }
+            });
 
-socket.on('material_change', function(data) {
-    if (!data) {
-        return;
-    }
-    addLogEntry(`Material change: ${data.from_material} → ${data.to_material} at layer ${data.layer}`, 'success');
+            socket.on('system_error', function(data) {
+                if (!data) {
+                    return;
+                }
+                addLogEntry(`Error: ${data.message}`, 'error');
+                showAlert('System error: ' + data.message, 'danger');
+            });
+
+            socket.on('material_change', function(data) {
+                if (!data) {
+                    return;
+                }
+                addLogEntry(`Material change: ${data.from_material} → ${data.to_material} at layer ${data.layer}`, 'success');
+            });
+        }
+    }, 100);
 });
 </script>
 {% endblock %}

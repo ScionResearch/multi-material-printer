@@ -30,6 +30,9 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeSocket();
     initializeAlerts();
     updateConnectionIndicator();
+
+    // Export socket globally for use in page-specific scripts
+    window.socket = socket;
 });
 
 // Socket.IO connection management
