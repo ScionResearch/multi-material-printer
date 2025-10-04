@@ -499,6 +499,53 @@ def api_emergency_stop():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/restart-print-manager', methods=['POST'])
+def api_restart_print_manager():
+    """API endpoint to restart the print manager service"""
+    try:
+        # Restart print manager using systemctl (for systemd) or pkill+restart
+        project_root = Path(__file__).parent.parent
+
+        # Try to restart via systemctl first (if running as systemd service)
+        result = subprocess.run(
+            ['systemctl', 'restart', 'print-manager'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode == 0:
+            socketio.emit('system_alert', {
+                'message': 'Print manager restarting (systemd service)',
+                'type': 'info'
+            })
+            return jsonify({'success': True, 'message': 'Print manager restart initiated via systemd'})
+
+        # Fallback: use pkill and restart script
+        subprocess.run(['pkill', '-f', 'print_manager.py'], timeout=2)
+        time.sleep(0.5)
+
+        # Start print manager in background
+        log_file = project_root / 'print_manager.log'
+        subprocess.Popen(
+            ['python3', str(project_root / 'src' / 'controller' / 'print_manager.py')],
+            stdout=open(log_file, 'a'),
+            stderr=subprocess.STDOUT,
+            cwd=str(project_root)
+        )
+
+        socketio.emit('system_alert', {
+            'message': 'Print manager restarting',
+            'type': 'info'
+        })
+
+        return jsonify({'success': True, 'message': 'Print manager restart initiated'})
+
+    except subprocess.TimeoutExpired:
+        return jsonify({'success': False, 'message': 'Restart command timed out'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.route('/api/config/pump', methods=['GET'])
 def api_get_pump_config():
     """API endpoint to get pump configuration"""

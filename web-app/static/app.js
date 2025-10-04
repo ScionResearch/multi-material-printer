@@ -155,14 +155,22 @@ function updateBackendIndicator() {
     if (backendStatus === 'online') {
         indicator.className = 'badge bg-success';
         indicator.innerHTML = '<i class="bi bi-cpu"></i> Controller Online';
+        indicator.style.cursor = 'default';
+        indicator.onclick = null;
         document.body.classList.remove('controller-offline');
     } else if (backendStatus === 'offline') {
         indicator.className = 'badge bg-danger';
         indicator.innerHTML = '<i class="bi bi-cpu"></i> Controller Offline';
+        indicator.style.cursor = 'pointer';
+        indicator.onclick = restartPrintManager;
+        indicator.title = 'Click to restart controller';
         document.body.classList.add('controller-offline');
     } else {
         indicator.className = 'badge bg-secondary';
         indicator.innerHTML = '<i class="bi bi-cpu"></i> Controller Unknown';
+        indicator.style.cursor = 'pointer';
+        indicator.onclick = restartPrintManager;
+        indicator.title = 'Click to restart controller';
         document.body.classList.add('controller-offline');
     }
 }
@@ -1176,6 +1184,39 @@ async function emergencyStop() {
         }
     } catch (error) {
         console.error('Error during emergency stop:', error);
+    }
+}
+
+async function restartPrintManager() {
+    if (!confirm('Restart the print manager controller?\n\nThis will temporarily interrupt monitoring and control.')) {
+        return;
+    }
+
+    const indicator = document.getElementById('backend-status');
+    const originalHtml = indicator.innerHTML;
+
+    try {
+        indicator.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Restarting...';
+        indicator.style.cursor = 'wait';
+        indicator.onclick = null;
+
+        const response = await fetch('/api/restart-print-manager', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showAlert('Print manager restart initiated', 'info');
+        } else {
+            throw new Error(result.message || 'Failed to restart print manager');
+        }
+    } catch (error) {
+        console.error('Error restarting print manager:', error);
+        showAlert(`Error: ${error.message}`, 'danger');
+        indicator.innerHTML = originalHtml;
+        updateBackendIndicator();
     }
 }
 
