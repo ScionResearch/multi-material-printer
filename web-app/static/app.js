@@ -498,38 +498,58 @@ function initializeAlerts() {
 }
 
 function showAlert(message, type = 'info', timeout = 5000) {
-    const alertContainer = document.getElementById('alert-container');
-    if (!alertContainer) return;
+    const toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) return;
 
-    // Create alert element
-    const alert = document.createElement('div');
-    alert.className = `alert alert-${type} alert-dismissible fade show fade-in`;
-    alert.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    // Map alert types to Bootstrap toast colors and icons
+    const typeMap = {
+        'success': { bg: 'success', icon: 'check-circle-fill' },
+        'danger': { bg: 'danger', icon: 'exclamation-triangle-fill' },
+        'warning': { bg: 'warning', icon: 'exclamation-circle-fill' },
+        'info': { bg: 'info', icon: 'info-circle-fill' },
+        'primary': { bg: 'primary', icon: 'bell-fill' },
+        'secondary': { bg: 'secondary', icon: 'gear-fill' }
+    };
+
+    const config = typeMap[type] || typeMap['info'];
+
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast align-items-center text-white bg-${config.bg} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="bi bi-${config.icon} me-2"></i>
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
     `;
 
     // Add to container
-    alertContainer.appendChild(alert);
+    toastContainer.appendChild(toast);
 
-    // Auto-dismiss after timeout
-    if (timeout > 0) {
-        setTimeout(() => {
-            if (alert.parentNode) {
-                alert.classList.remove('show');
-                setTimeout(() => {
-                    if (alert.parentNode) {
-                        alert.remove();
-                    }
-                }, 150);
-            }
-        }, timeout);
-    }
+    // Initialize Bootstrap toast
+    const bsToast = new bootstrap.Toast(toast, {
+        autohide: true,
+        delay: timeout
+    });
 
-    // Remove old alerts if too many
-    const alerts = alertContainer.querySelectorAll('.alert');
-    if (alerts.length > 3) {
-        alerts[0].remove();
+    bsToast.show();
+
+    // Remove from DOM after hidden
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+
+    // Remove old toasts if too many (keep max 5)
+    const toasts = toastContainer.querySelectorAll('.toast');
+    if (toasts.length > 5) {
+        toasts[0].remove();
     }
 }
 

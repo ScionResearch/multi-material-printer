@@ -650,21 +650,53 @@ async function saveLoggingConfig() {
 }
 
 // Utility Functions
-function showAlert(message, type = 'info') {
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+function showAlert(message, type = 'info', timeout = 5000) {
+    const toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) return;
+
+    // Map alert types to toast styling
+    const typeConfig = {
+        'success': { icon: 'bi-check-circle-fill', bg: 'bg-success' },
+        'danger': { icon: 'bi-exclamation-triangle-fill', bg: 'bg-danger' },
+        'warning': { icon: 'bi-exclamation-circle-fill', bg: 'bg-warning' },
+        'info': { icon: 'bi-info-circle-fill', bg: 'bg-info' }
+    };
+
+    const config = typeConfig[type] || typeConfig['info'];
+
+    // Create unique ID for this toast
+    const toastId = 'toast-' + Date.now();
+
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.id = toastId;
+    toast.className = 'toast align-items-center text-white border-0';
+    toast.classList.add(config.bg);
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                <i class="bi ${config.icon} me-2"></i>${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
     `;
 
-    const container = document.getElementById('alert-container') || document.querySelector('.container');
-    container.insertBefore(alertDiv, container.firstChild);
+    // Add to container
+    toastContainer.appendChild(toast);
 
-    // Auto-dismiss after 5 seconds
-    setTimeout(() => {
-        if (alertDiv.parentNode) {
-            alertDiv.remove();
-        }
-    }, 5000);
+    // Initialize and show Bootstrap toast
+    const bsToast = new bootstrap.Toast(toast, {
+        autohide: true,
+        delay: timeout
+    });
+    bsToast.show();
+
+    // Remove from DOM after hidden
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
 }
