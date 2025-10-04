@@ -4,12 +4,16 @@
 
 - Check that pump status is updating in the UI (pumps turning green when pump is running)
 
-notifications as pop ups
+- check that hardware diagnostics works correctly
+
+- check the logging in system configuration is wired up and functional
+
+
 
 
 
 ### Material Change Testing
-- [x] **Validate material change sequence**
+- [] **Validate material change sequence**
   - Monitor bed position during material changes
   - Verify pump operation timing
   - Confirm proper resume after material change

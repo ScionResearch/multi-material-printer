@@ -421,7 +421,8 @@ async function calibrateSinglePump(pumpId) {
 
         const response = await fetch(`/api/calibration/pump/${motorId}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
         });
 
         const result = await response.json();
