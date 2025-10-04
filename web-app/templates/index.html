@@ -4,173 +4,8 @@
 
 {% block content %}
 <div class="row">
-    <!-- Status Overview -->
+    <!-- Main Content Column -->
     <div class="col-lg-8">
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Print Status</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-6">
-                        <h6>Printer Status</h6>
-                        <p class="fs-5" id="printer-status">
-                            <span class="badge bg-secondary">{{ status.printer_status }}</span>
-                        </p>
-
-                        <h6>Current Layer</h6>
-                        <p class="fs-4 fw-bold" id="current-layer">{{ status.current_layer }}</p>
-
-                        <h6>Progress</h6>
-                        <div class="progress mb-3" style="height: 25px;">
-                            <div class="progress-bar progress-bar-striped progress-bar-animated"
-                                 role="progressbar"
-                                 id="progress-bar"
-                                 style="width: {{ status.progress_percent }}%">
-                                <span id="progress-text">{{ "%.1f"|format(status.progress_percent) }}%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-6">
-                        <h6>Active Material</h6>
-                        <p class="fs-5" id="current-material">
-                            <span class="badge bg-info">{{ status.current_material }}</span>
-                        </p>
-
-                        <h6>Next Material Change</h6>
-                        <p id="next-change">
-                            Material <strong>{{ status.next_material }}</strong> at layer <strong>{{ status.next_change_layer }}</strong>
-                        </p>
-
-                        <h6>Multi-Material Status</h6>
-                        <p id="mm-status">
-                            {% if status.mm_active %}
-                                <span class="badge bg-success">Active</span>
-                            {% else %}
-                                <span class="badge bg-secondary">Stopped</span>
-                            {% endif %}
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Real-Time Operation Status -->
-        <div class="card mb-4">
-            <div class="card-header bg-warning">
-                <h5 class="mb-0"><i class="bi bi-clock"></i> Current Operation & Timing</h5>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3">
-                        <h6>Current Operation</h6>
-                        <p class="fs-5" id="current-operation">
-                            <span class="badge bg-primary" id="operation-badge">{{ status.current_operation or 'idle' }}</span>
-                        </p>
-                    </div>
-                    <div class="col-md-3">
-                        <h6>Operation Duration</h6>
-                        <p class="fs-4 fw-bold" id="operation-duration">{{ "%.1f"|format(status.operation_duration or 0) }}s</p>
-                    </div>
-                    <div class="col-md-3">
-                        <h6>Start Time</h6>
-                        <p id="operation-start">{{ status.operation_start_time or '--:--' }}</p>
-                    </div>
-                    <div class="col-md-3">
-                        <h6>Step Progress</h6>
-                        <div class="progress" style="height: 20px;">
-                            <div class="progress-bar" role="progressbar" id="step-progress-bar" style="width: 0%">
-                                <span id="step-progress-text">0/0</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Pump Status Grid -->
-                <hr>
-                <h6><i class="bi bi-droplet"></i> Pump Status</h6>
-                <div class="row">
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <div class="pump-indicator" id="pump-a-indicator">
-                                <i class="bi bi-droplet-fill fs-2"></i>
-                                <div class="small">Pump A</div>
-                                <span class="badge bg-secondary" id="pump-a-status">idle</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <div class="pump-indicator" id="pump-b-indicator">
-                                <i class="bi bi-droplet-fill fs-2"></i>
-                                <div class="small">Pump B</div>
-                                <span class="badge bg-secondary" id="pump-b-status">idle</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <div class="pump-indicator" id="pump-c-indicator">
-                                <i class="bi bi-droplet-fill fs-2"></i>
-                                <div class="small">Pump C</div>
-                                <span class="badge bg-secondary" id="pump-c-status">idle</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="text-center">
-                            <div class="pump-indicator" id="drain-pump-indicator">
-                                <i class="bi bi-funnel-fill fs-2"></i>
-                                <div class="small">Drain</div>
-                                <span class="badge bg-secondary" id="drain-pump-status">idle</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Quick Action Cards -->
-        <div class="row mb-4">
-            <div class="col-md-4">
-                <div class="card text-center h-100 quick-action-card border-success">
-                    <div class="card-body">
-                        <i class="bi bi-layers-fill text-success" style="font-size: 3rem;"></i>
-                        <h5 class="card-title mt-2">Multi-Material Recipe</h5>
-                        <p class="card-text small text-muted">Enable automatic material changes during active print</p>
-                        <button class="btn btn-success btn-lg w-100" onclick="startMultiMaterial()" id="start-print-btn">
-                            <i class="bi bi-check-circle"></i> Enable Recipe
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card text-center h-100 quick-action-card border-warning">
-                    <div class="card-body">
-                        <i class="bi bi-droplet-fill text-warning" style="font-size: 3rem;"></i>
-                        <h5 class="card-title mt-2">Test Pumps</h5>
-                        <p class="card-text small text-muted">Quick pump functionality test</p>
-                        <button class="btn btn-warning btn-lg w-100" onclick="quickPumpTest()">
-                            <i class="bi bi-gear-fill"></i> Test All Pumps
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card text-center h-100 quick-action-card border-info">
-                    <div class="card-body">
-                        <i class="bi bi-list-check text-info" style="font-size: 3rem;"></i>
-                        <h5 class="card-title mt-2">Recipe</h5>
-                        <p class="card-text small text-muted">Create or modify material change sequence</p>
-                        <a href="{{ url_for('recipe_page') }}" class="btn btn-info btn-lg w-100">
-                            <i class="bi bi-pencil-fill"></i> Edit Recipe
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Print File Management -->
         <div class="card mb-4">
             <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
@@ -307,7 +142,7 @@
         </div>
 
         <!-- Activity Log -->
-        <div class="card">
+        <div class="card mb-4">
             <div class="card-header bg-dark text-white">
                 <h5 class="mb-0"><i class="bi bi-terminal"></i> Activity Log</h5>
             </div>
@@ -315,6 +150,132 @@
                 <div id="activity-log" class="bg-dark text-light p-3 rounded" style="height: 300px; overflow-y: auto; font-family: monospace;">
                     <div class="log-entry text-info">[{{ status.last_update }}] System initialized</div>
                     <div class="log-entry">Waiting for printer status updates...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Print Status (moved to bottom) -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> Print Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Printer Status</h6>
+                        <p class="fs-5" id="printer-status">
+                            <span class="badge bg-secondary">{{ status.printer_status }}</span>
+                        </p>
+
+                        <h6>Current Layer</h6>
+                        <p class="fs-4 fw-bold" id="current-layer">{{ status.current_layer }}</p>
+
+                        <h6>Progress</h6>
+                        <div class="progress mb-3" style="height: 25px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                 role="progressbar"
+                                 id="progress-bar"
+                                 style="width: {{ status.progress_percent }}%">
+                                <span id="progress-text">{{ "%.1f"|format(status.progress_percent) }}%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <h6>Active Material</h6>
+                        <p class="fs-5" id="current-material">
+                            <span class="badge bg-info">{{ status.current_material }}</span>
+                        </p>
+
+                        <h6>Next Material Change</h6>
+                        <p id="next-change">
+                            Material <strong>{{ status.next_material }}</strong> at layer <strong>{{ status.next_change_layer }}</strong>
+                        </p>
+
+                        <h6>Multi-Material Status</h6>
+                        <p id="mm-status">
+                            {% if status.mm_active %}
+                                <span class="badge bg-success">Active</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Stopped</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-Time Operation Status (moved to bottom) -->
+        <div class="card">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0"><i class="bi bi-clock"></i> Current Operation & Timing</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <h6>Current Operation</h6>
+                        <p class="fs-5" id="current-operation">
+                            <span class="badge bg-primary" id="operation-badge">{{ status.current_operation or 'idle' }}</span>
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Operation Duration</h6>
+                        <p class="fs-4 fw-bold" id="operation-duration">{{ "%.1f"|format(status.operation_duration or 0) }}s</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Start Time</h6>
+                        <p id="operation-start">{{ status.operation_start_time or '--:--' }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Step Progress</h6>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar" role="progressbar" id="step-progress-bar" style="width: 0%">
+                                <span id="step-progress-text">0/0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pump Status Grid -->
+                <hr>
+                <h6><i class="bi bi-droplet"></i> Pump Status</h6>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="pump-a-indicator">
+                                <i class="bi bi-droplet-fill fs-2"></i>
+                                <div class="small">Pump A</div>
+                                <span class="badge bg-secondary" id="pump-a-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="pump-b-indicator">
+                                <i class="bi bi-droplet-fill fs-2"></i>
+                                <div class="small">Pump B</div>
+                                <span class="badge bg-secondary" id="pump-b-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="pump-c-indicator">
+                                <i class="bi bi-droplet-fill fs-2"></i>
+                                <div class="small">Pump C</div>
+                                <span class="badge bg-secondary" id="pump-c-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="drain-pump-indicator">
+                                <i class="bi bi-funnel-fill fs-2"></i>
+                                <div class="small">Drain</div>
+                                <span class="badge bg-secondary" id="drain-pump-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

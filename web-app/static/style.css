@@ -1,106 +1,138 @@
 /* Scion Multi-Material Printer Web Interface - Dark Mode with Orange/Yellow/Red Accents */
 
 :root {
-    /* Dark Mode Color Palette */
-    --bg-primary: #0f0f23;
-    --bg-secondary: #1a1a2e;
-    --bg-tertiary: #16213e;
-    --bg-card: #1a1a2e;
-    --bg-card-hover: #252547;
+    /* Simplified Color Scheme */
+    --scion-teal: #00424a;
+    --scion-mint: #80ffb4;
+    --white: #ffffff;
+    --black: #000000;
+    --status-go: #22c55e;
+    --status-stop: #ef4444;
 
-    /* Accent Colors */
-    --accent-orange: #ff6b35;
-    --accent-yellow: #ffd23f;
-    --accent-red: #ff4757;
-    --accent-orange-light: #ff8c69;
-    --accent-yellow-light: #ffe066;
-    --accent-red-light: #ff6b7a;
+    /* Backgrounds */
+    --bg-primary: #000000;
+    --bg-secondary: #0a0a0a;
+    --bg-tertiary: #1a1a1a;
+    --bg-card: rgba(0, 66, 74, 0.1);
+    --bg-card-hover: rgba(0, 66, 74, 0.2);
 
     /* Text Colors */
     --text-primary: #ffffff;
-    --text-secondary: #b8bcc8;
-    --text-muted: #6c7293;
+    --text-secondary: #b8b8b8;
+    --text-muted: #6b7280;
 
     /* Borders and Effects */
-    --border: #2a2d47;
-    --border-light: #3a3f5c;
-    --shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.4);
-    --glow: 0 0 20px rgba(255, 107, 53, 0.3);
-
-    /* Semantic Colors */
-    --success: #2ed573;
-    --warning: var(--accent-yellow);
-    --danger: var(--accent-red);
-    --info: #3742fa;
+    --border: rgba(128, 255, 180, 0.2);
+    --shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.7);
+    --glow-mint: 0 0 20px rgba(128, 255, 180, 0.3);
 
     /* Design System */
-    --border-radius: 12px;
-    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --border-radius: 8px;
+    --transition: all 0.2s ease;
 }
 
-/* Global dark theme */
+/* Global dark theme with animated background */
 body {
-    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%);
     color: var(--text-primary);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
 }
 
-/* Navbar */
+body::before {
+    content: '';
+    position: fixed;
+    top: -50%;
+    right: -50%;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, rgba(0, 139, 139, 0.15) 0%, transparent 70%);
+    animation: pulse 8s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.1); }
+}
+
+/* Navbar - Scion Branding */
 .navbar {
-    background: rgba(26, 26, 46, 0.95) !important;
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--border);
-    box-shadow: var(--shadow);
+    background: var(--scion-teal) !important;
+    border-bottom: 2px solid var(--scion-mint);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    padding: 0.5rem 0;
 }
 
 .navbar-brand {
-    color: var(--accent-orange) !important;
-    font-weight: 700;
-    font-size: 1.25rem;
-    text-shadow: 0 0 10px rgba(255, 107, 53, 0.5);
+    color: var(--white) !important;
+    text-decoration: none;
+}
+
+.scion-logo {
+    height: 50px;
+    width: auto;
+    /* Convert dark teal (#00424a) to mint green (#80ffb4) */
+    filter: brightness(0) saturate(100%) invert(88%) sepia(28%) saturate(1019%) hue-rotate(86deg) brightness(103%) contrast(101%);
 }
 
 .nav-link {
-    color: var(--text-secondary) !important;
-    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8) !important;
+    font-weight: 400;
     transition: var(--transition);
 }
 
 .nav-link:hover {
-    color: var(--accent-orange) !important;
-    text-shadow: 0 0 8px rgba(255, 107, 53, 0.4);
+    color: var(--scion-mint) !important;
 }
 
 .nav-link.active {
-    color: var(--accent-yellow) !important;
-    text-shadow: 0 0 8px rgba(255, 210, 63, 0.4);
+    color: var(--scion-mint) !important;
+    font-weight: 500;
 }
 
-/* Cards */
+/* Glass Cards */
 .card {
     background: var(--bg-card) !important;
+    backdrop-filter: blur(20px);
     border: 1px solid var(--border) !important;
     border-radius: var(--border-radius) !important;
     box-shadow: var(--shadow) !important;
     transition: var(--transition) !important;
-    backdrop-filter: blur(10px);
+    overflow: hidden;
+    position: relative;
+}
+
+.card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
 }
 
 .card:hover {
     background: var(--bg-card-hover) !important;
+    transform: translateY(-4px);
     box-shadow: var(--shadow-lg) !important;
-    transform: translateY(-2px);
-    border-color: var(--border-light) !important;
 }
 
 .card-header {
     background: var(--bg-tertiary) !important;
     border-bottom: 1px solid var(--border) !important;
     color: var(--text-primary) !important;
-    padding: 1.25rem 1.5rem !important;
-    font-weight: 600;
+    padding: 1.5rem !important;
+    font-weight: 700;
+    font-size: 1.1rem;
     border-radius: var(--border-radius) var(--border-radius) 0 0 !important;
 }
 
@@ -109,36 +141,36 @@ body {
     color: var(--text-secondary);
 }
 
-/* Colored headers - Flat & Minimalistic */
+/* Colored headers - Teal/Green Bioeconomy Theme */
 .card-header.bg-primary {
-    background: var(--info) !important;
+    background: linear-gradient(135deg, var(--accent-teal) 0%, var(--accent-blue) 100%) !important;
     color: white !important;
 }
 
 .card-header.bg-warning {
-    background: var(--accent-orange) !important;
+    background: linear-gradient(135deg, var(--accent-teal-light) 0%, var(--accent-teal) 100%) !important;
     color: white !important;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .card-header.bg-success {
-    background: var(--success) !important;
+    background: linear-gradient(135deg, var(--accent-green) 0%, var(--accent-green-light) 100%) !important;
     color: white !important;
 }
 
 .card-header.bg-danger {
-    background: var(--accent-red) !important;
+    background: linear-gradient(135deg, #c44569 0%, #a53860 100%) !important;
     color: white !important;
 }
 
 .card-header.bg-info {
-    background: var(--info) !important;
+    background: linear-gradient(135deg, var(--accent-teal) 0%, var(--accent-green) 100%) !important;
     color: white !important;
 }
 
 .card-header.bg-dark {
     background: var(--bg-primary) !important;
-    color: var(--accent-orange-light) !important;
+    color: var(--accent-teal-light) !important;
 }
 
 .card-header.bg-secondary {
@@ -185,12 +217,31 @@ body {
     overflow: hidden;
 }
 
+.btn::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+
+.btn:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
 .btn:hover {
-    opacity: 0.9;
+    transform: translateY(-2px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.3);
 }
 
 .btn:active {
-    opacity: 0.8;
+    transform: translateY(0);
 }
 
 .btn-lg {
@@ -205,31 +256,52 @@ body {
     border-radius: 8px !important;
 }
 
-/* Button colors - Flat & Minimalistic */
+/* Button colors - Simplified Scion Theme */
 .btn-primary {
-    background: var(--info) !important;
+    background: var(--scion-teal) !important;
     color: white !important;
+}
+
+.btn-primary:hover {
+    background: #003640 !important;
+    box-shadow: var(--glow-mint);
 }
 
 .btn-success {
-    background: var(--success) !important;
+    background: var(--status-go) !important;
     color: white !important;
+}
+
+.btn-success:hover {
+    background: #16a34a !important;
 }
 
 .btn-warning {
-    background: var(--accent-orange) !important;
-    color: white !important;
+    background: var(--scion-mint) !important;
+    color: var(--black) !important;
     font-weight: 600;
 }
 
+.btn-warning:hover {
+    background: #6ae69f !important;
+}
+
 .btn-danger {
-    background: var(--accent-red) !important;
+    background: var(--status-stop) !important;
     color: white !important;
 }
 
+.btn-danger:hover {
+    background: #dc2626 !important;
+}
+
 .btn-info {
-    background: var(--accent-orange) !important;
+    background: var(--scion-teal) !important;
     color: white !important;
+}
+
+.btn-info:hover {
+    background: #003640 !important;
 }
 
 /* Outline buttons */
@@ -271,14 +343,14 @@ body {
 
 .btn-outline-info {
     background: transparent !important;
-    border: 2px solid var(--accent-orange-light) !important;
-    color: var(--accent-orange-light) !important;
+    border: 2px solid var(--accent-teal-light) !important;
+    color: var(--accent-teal-light) !important;
 }
 
 .btn-outline-info:hover {
-    background: var(--accent-orange) !important;
+    background: var(--accent-teal) !important;
     color: white !important;
-    box-shadow: var(--glow);
+    box-shadow: var(--glow-teal);
 }
 
 .btn-outline-secondary {
@@ -348,39 +420,65 @@ body {
 }
 
 .progress-bar {
-    background: var(--accent-orange) !important;
-    transition: var(--transition) !important;
+    background: linear-gradient(90deg, var(--accent-teal), var(--accent-teal-light)) !important;
+    position: relative;
+    overflow: hidden;
+    transition: width 0.6s ease !important;
 }
 
-/* Table improvements */
+.progress-bar::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    animation: progress-shine 2s infinite;
+}
+
+@keyframes progress-shine {
+    0% { left: -100%; }
+    100% { left: 200%; }
+}
+
+/* Table improvements - Dark Mode */
 .table {
-    color: var(--text-secondary) !important;
+    color: var(--text-primary) !important;
     border-radius: var(--border-radius);
     overflow: hidden;
+    background: transparent !important;
 }
 
 .table thead th {
-    background: var(--bg-primary) !important;
-    color: var(--accent-orange-light) !important;
+    background: var(--bg-secondary) !important;
+    color: var(--scion-mint) !important;
     border: none !important;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     font-size: 0.8rem;
+    padding: 1rem !important;
 }
 
 .table tbody tr {
-    background: var(--bg-card) !important;
+    background: transparent !important;
     border-bottom: 1px solid var(--border) !important;
     transition: var(--transition);
 }
 
 .table tbody tr:hover {
-    background: var(--bg-card-hover) !important;
-    box-shadow: 0 0 15px rgba(255, 107, 53, 0.1);
+    background: rgba(128, 255, 180, 0.05) !important;
 }
 
-/* Form improvements */
+.table tbody td {
+    color: var(--text-primary) !important;
+    padding: 0.75rem 1rem !important;
+    border-color: var(--border) !important;
+    background: transparent !important;
+}
+
+/* Form improvements - Dark Mode */
 .form-control, .form-select {
     background: var(--bg-tertiary) !important;
     border: 1px solid var(--border) !important;
@@ -390,14 +488,31 @@ body {
 }
 
 .form-control:focus, .form-select:focus {
-    background: var(--bg-card) !important;
-    border-color: var(--accent-orange) !important;
-    box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.1) !important;
+    background: var(--bg-secondary) !important;
+    border-color: var(--scion-mint) !important;
+    box-shadow: 0 0 0 3px rgba(128, 255, 180, 0.1) !important;
     color: var(--text-primary) !important;
 }
 
 .form-control::placeholder {
-    color: var(--text-muted) !important;
+    color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.form-label {
+    color: var(--text-primary) !important;
+    font-weight: 500;
+}
+
+/* Form select dropdown options */
+.form-select option {
+    background: var(--bg-tertiary) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Make small helper text more readable */
+small.text-muted, .small.text-muted {
+    color: rgba(255, 255, 255, 0.7) !important;
+    font-size: 0.85rem;
 }
 
 /* Alert improvements */
@@ -522,12 +637,12 @@ footer {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: var(--accent-orange);
+    background: linear-gradient(135deg, var(--accent-teal), var(--accent-teal-light));
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--accent-orange-light);
+    background: linear-gradient(135deg, var(--accent-teal-light), var(--accent-green-light));
 }
 
 /* Special sequence step card improvements */
@@ -671,21 +786,38 @@ footer {
     border-radius: 3px;
 }
 
-/* Quick Action Cards - Sleek & Minimalistic */
+/* Quick Action Cards - Glassmorphic with Glow */
 .quick-action-card {
+    position: relative;
+    padding: 2rem;
+    text-align: center;
+    border-radius: var(--border-radius);
+    border: 2px solid var(--border) !important;
+    background: var(--bg-card) !important;
+    backdrop-filter: blur(20px);
     transition: var(--transition);
     cursor: pointer;
-    border: 1px solid var(--border) !important;
-    background: var(--bg-card) !important;
 }
 
 .quick-action-card:hover {
-    border-color: var(--border-light) !important;
-    background: var(--bg-card-hover) !important;
+    transform: translateY(-8px) scale(1.02);
+    border-color: var(--accent-teal-light) !important;
+    box-shadow: var(--glow-teal);
 }
 
 .quick-action-card .card-body {
     padding: 2rem 1.5rem;
+}
+
+.quick-action-card i {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    display: inline-block;
+    transition: all 0.4s ease;
+}
+
+.quick-action-card:hover i {
+    transform: scale(1.1) rotate(5deg);
 }
 
 .quick-action-card .card-text {
@@ -694,8 +826,10 @@ footer {
 }
 
 .quick-action-card .btn {
-    font-weight: 600;
-    letter-spacing: 0.025em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-size: 0.9rem;
 }
 
 /* Enhanced Recipe Table */
@@ -768,6 +902,39 @@ footer {
 
 .quick-action-card:hover .shortcut-hint {
     opacity: 1;
+}
+
+/* Print File Cards - Bright and Prominent */
+.file-card {
+    background: linear-gradient(135deg, var(--scion-teal), #005a5a) !important;
+    border: 2px solid var(--scion-mint) !important;
+    transition: var(--transition);
+    cursor: pointer;
+}
+
+.file-card:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: var(--glow-mint), var(--shadow-lg);
+    border-color: var(--scion-mint);
+}
+
+.file-card .card-title {
+    color: var(--white) !important;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.file-card .file-icon i {
+    color: var(--scion-mint) !important;
+}
+
+.file-card.selected {
+    border-color: var(--scion-mint);
+    background: linear-gradient(135deg, #007a7a, var(--scion-teal)) !important;
+    box-shadow: 0 0 20px rgba(128, 255, 180, 0.4);
 }
 
 /* Disable interactive controls when controller offline */
