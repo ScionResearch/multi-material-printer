@@ -70,7 +70,7 @@ socketio = SocketIO(
     logger=_debug_socket,
     engineio_logger=_debug_socket,
     ping_interval=25,      # seconds between pings
-    ping_timeout=20,       # timeout before considering a client gone
+    ping_timeout=60,       # timeout before considering a client gone (must be > ping_interval)
     max_http_buffer_size=1_000_000,
     cookie=None            # stateless; avoid sticky session issues for kiosk browsers
 )
