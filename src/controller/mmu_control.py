@@ -134,14 +134,9 @@ class MMUController:
                 print(f"ERROR: Could not fill from {pump_name}")
                 return False
 
-            # Step 3: Allow mixing time
-            print(f"Mixing phase - waiting {mixing_time}s...")
-            import time
-            time.sleep(mixing_time)
-            print("Mixing phase completed")
-
-            # Step 4: Settle time
+            # Step 3: Settle time
             print(f"Settling phase - waiting {settle_time}s...")
+            import time
             time.sleep(settle_time)
             print("Settling phase completed")
 

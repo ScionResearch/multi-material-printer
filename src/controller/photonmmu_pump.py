@@ -18,6 +18,11 @@ import RPi.GPIO as GPIO
 from adafruit_motorkit import MotorKit
 from adafruit_motor import stepper
 import time
+import logging
+
+# Set up logger for pump operations
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 
 # Sensor setup
 
@@ -47,16 +52,31 @@ def read_sensor():
 
     return reading
     
-     
-# Initialize the motor kit
-kit = MotorKit()
-kit2 = MotorKit(address=0x61)
+
+# Initialize the motor kit with I2C verification
+try:
+    logger.info("[I2C] Initializing MotorKit at default address 0x60...")
+    kit = MotorKit()
+    logger.info("[I2C] ✓ MotorKit 0x60 initialized successfully")
+except Exception as e:
+    logger.error(f"[I2C] ✗ Failed to initialize MotorKit at 0x60: {e}")
+    raise
+
+try:
+    logger.info("[I2C] Initializing MotorKit at address 0x61...")
+    kit2 = MotorKit(address=0x61)
+    logger.info("[I2C] ✓ MotorKit 0x61 initialized successfully")
+except Exception as e:
+    logger.error(f"[I2C] ✗ Failed to initialize MotorKit at 0x61: {e}")
+    raise
 
 # Define the four possible stepper motors
 STEPPER_A = kit.stepper1
 STEPPER_B = kit.stepper2
 STEPPER_C = kit2.stepper1
 STEPPER_D = kit2.stepper2
+
+logger.info("[I2C] All stepper motor objects created (A, B, C, D)")
 
 def initialize_motors():
     """
@@ -71,57 +91,103 @@ def initialize_motors():
 def run_stepper(pumpmat, direction, usr_time):
     """
     Control stepper motor for pump operations.
-    
+
     Args:
         pumpmat (str): Pump identifier ('A', 'B', 'C', 'D')
         direction (str): Direction ('F' forward, 'R' reverse)
         usr_time (int): Duration in seconds
-    
+
     Raises:
         ValueError: Invalid pump identifier
     """
+    pump_name_map = {'A': 'Pump A', 'B': 'Pump B', 'C': 'Pump C', 'D': 'Drain Pump'}
+    pump_display_name = pump_name_map.get(pumpmat, f'Pump {pumpmat}')
+    direction_display = 'FORWARD' if direction == 'F' else 'REVERSE'
+
+    logger.info(f"[PUMP] Starting {pump_display_name} - Direction: {direction_display}, Duration: {usr_time}s")
+
     # Choose the correct stepper motor based on the input variable
-    if pumpmat == 'A':
-        stpr = STEPPER_A
-        STEPPER_B.release()
-        STEPPER_C.release()
-        STEPPER_D.release()
-    elif pumpmat == 'B':
-        stpr = STEPPER_B
-        STEPPER_A.release()
-        STEPPER_C.release()
-        STEPPER_D.release()
-    elif pumpmat == 'C':
-        stpr = STEPPER_C
-        STEPPER_A.release()
-        STEPPER_B.release()
-        STEPPER_D.release()
-    elif pumpmat == 'D':
-        stpr = STEPPER_D
-        STEPPER_A.release()
-        STEPPER_B.release()
-        STEPPER_C.release()
-    else:
-        raise ValueError("Invalid stepper number")
-    # Release the stepper motor
+    try:
+        if pumpmat == 'A':
+            stpr = STEPPER_A
+            controller_addr = "0x60"
+            stepper_num = 1
+            STEPPER_B.release()
+            STEPPER_C.release()
+            STEPPER_D.release()
+        elif pumpmat == 'B':
+            stpr = STEPPER_B
+            controller_addr = "0x60"
+            stepper_num = 2
+            STEPPER_A.release()
+            STEPPER_C.release()
+            STEPPER_D.release()
+        elif pumpmat == 'C':
+            stpr = STEPPER_C
+            controller_addr = "0x61"
+            stepper_num = 1
+            STEPPER_A.release()
+            STEPPER_B.release()
+            STEPPER_D.release()
+        elif pumpmat == 'D':
+            stpr = STEPPER_D
+            controller_addr = "0x61"
+            stepper_num = 2
+            STEPPER_A.release()
+            STEPPER_B.release()
+            STEPPER_C.release()
+        else:
+            logger.error(f"[PUMP] ✗ Invalid pump identifier: {pumpmat}")
+            raise ValueError("Invalid stepper number")
+
+        logger.info(f"[I2C] {pump_display_name} mapped to controller {controller_addr}, stepper{stepper_num}")
+        logger.info(f"[I2C] Released all other motors to prevent conflicts")
+
+    except Exception as e:
+        logger.error(f"[I2C] ✗ Failed to select motor: {e}")
+        raise
 
     # Set the speed and number of steps for the stepper motor
-    
-    stpr.steps = 200
-    stpr.setSpeed = 0.005
-    #stpr.release()
-    #time.sleep(20)
+    try:
+        stpr.steps = 200
+        stpr.setSpeed = 0.005
+        logger.info(f"[PUMP] Motor configuration: 200 steps, 5ms step delay")
+    except Exception as e:
+        logger.error(f"[I2C] ✗ Failed to configure motor: {e}")
+        raise
+
     # Run the stepper motor until the desired level is reached
-    t_end = time.time()+usr_time
-    while time.time() < t_end:
-        if direction == 'F':
-            
-            stpr.onestep(direction=stepper.FORWARD)
-            time.sleep(0.005)
-        else:
-            stpr.onestep(direction=stepper.BACKWARD)
-            time.sleep(0.005)
-    stpr.release()
+    try:
+        t_start = time.time()
+        t_end = t_start + usr_time
+        step_count = 0
+
+        logger.info(f"[PUMP] Beginning motor movement...")
+
+        while time.time() < t_end:
+            if direction == 'F':
+                stpr.onestep(direction=stepper.FORWARD)
+                time.sleep(0.005)
+            else:
+                stpr.onestep(direction=stepper.BACKWARD)
+                time.sleep(0.005)
+            step_count += 1
+
+        actual_duration = time.time() - t_start
+        steps_per_second = step_count / actual_duration if actual_duration > 0 else 0
+
+        logger.info(f"[PUMP] ✓ {pump_display_name} completed successfully")
+        logger.info(f"[PUMP] Statistics: {step_count} steps in {actual_duration:.2f}s ({steps_per_second:.1f} steps/sec)")
+
+    except Exception as e:
+        logger.error(f"[I2C] ✗ Motor movement failed: {e}")
+        raise
+    finally:
+        try:
+            stpr.release()
+            logger.info(f"[I2C] Motor released to safe state")
+        except Exception as e:
+            logger.error(f"[I2C] ✗ Failed to release motor: {e}")
 
 def run_stepperrev(pumpmat, reqlevel):
     """Deprecated legacy reverse operation. Prefer run_stepper().
