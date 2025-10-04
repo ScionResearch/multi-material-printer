@@ -668,6 +668,164 @@ footer {
     color: var(--text-primary);
 }
 
+/* Raspberry Pi 1024x600 Optimizations */
+@media (max-width: 1024px) and (max-height: 768px) {
+    /* Compact navbar */
+    .navbar {
+        padding: 0.25rem 0 !important;
+    }
+
+    .scion-logo {
+        height: 32px !important;
+    }
+
+    .navbar-brand {
+        font-size: 0.9rem !important;
+    }
+
+    .nav-link {
+        font-size: 0.85rem !important;
+        padding: 0.4rem 0.6rem !important;
+    }
+
+    .nav-link i {
+        font-size: 0.9rem !important;
+    }
+
+    .badge {
+        font-size: 0.65rem !important;
+        padding: 0.3rem 0.5rem !important;
+    }
+
+    /* Compact container */
+    .container, .container-fluid {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+        max-width: 100% !important;
+    }
+
+    .container.mt-4 {
+        margin-top: 0.75rem !important;
+    }
+
+    /* Compact cards */
+    .card {
+        margin-bottom: 0.75rem !important;
+    }
+
+    .card-header {
+        padding: 0.75rem !important;
+        font-size: 0.95rem !important;
+    }
+
+    .card-body {
+        padding: 0.75rem !important;
+    }
+
+    /* Compact row spacing */
+    .row > * {
+        margin-bottom: 0.75rem !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+
+    /* Compact buttons */
+    .btn {
+        padding: 0.5rem 1rem !important;
+        font-size: 0.85rem !important;
+    }
+
+    .btn-lg {
+        padding: 0.65rem 1.25rem !important;
+        font-size: 0.95rem !important;
+    }
+
+    .btn-sm {
+        padding: 0.35rem 0.75rem !important;
+        font-size: 0.75rem !important;
+    }
+
+    /* Compact forms */
+    .form-control, .form-select {
+        padding: 0.5rem !important;
+        font-size: 0.85rem !important;
+    }
+
+    .form-label {
+        font-size: 0.85rem !important;
+        margin-bottom: 0.25rem !important;
+    }
+
+    /* Compact tables */
+    .table thead th {
+        padding: 0.5rem !important;
+        font-size: 0.75rem !important;
+    }
+
+    .table tbody td {
+        padding: 0.4rem 0.5rem !important;
+        font-size: 0.8rem !important;
+    }
+
+    /* Compact logs */
+    #activity-log, #process-log, #live-log-preview {
+        max-height: 180px !important;
+        font-size: 0.7rem !important;
+        padding: 0.5rem !important;
+    }
+
+    .log-entry {
+        font-size: 0.7rem !important;
+        padding: 1px 2px !important;
+        margin-bottom: 1px !important;
+    }
+
+    /* Compact file cards */
+    .file-card {
+        padding: 0.5rem !important;
+    }
+
+    .file-card .card-title {
+        font-size: 0.85rem !important;
+    }
+
+    .file-card .file-icon i {
+        font-size: 1.5rem !important;
+    }
+
+    /* Hide footer on small displays */
+    footer {
+        display: none !important;
+    }
+
+    /* Compact status displays */
+    .fs-5 {
+        font-size: 0.95rem !important;
+    }
+
+    .fs-4 {
+        font-size: 1.1rem !important;
+    }
+
+    /* Compact quick action cards */
+    .quick-action-card {
+        padding: 1rem !important;
+    }
+
+    .quick-action-card .card-body {
+        padding: 1rem 0.75rem !important;
+    }
+
+    .quick-action-card i {
+        font-size: 2.5rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+
+    .quick-action-card .btn {
+        font-size: 0.8rem !important;
+    }
+}
+
 /* Responsive improvements */
 @media (max-width: 768px) {
     .container, .container-fluid {
