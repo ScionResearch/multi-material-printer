@@ -58,6 +58,15 @@ try:
     logger.info("[I2C] Initializing MotorKit at default address 0x60...")
     kit = MotorKit()
     logger.info("[I2C] ✓ MotorKit 0x60 initialized successfully")
+
+    # Verify I2C communication by reading PCA9685 registers
+    try:
+        freq = kit._pca.frequency
+        prescale = kit._pca.prescale_reg
+        logger.info(f"[I2C] Controller 0x60 - PWM freq: {freq}Hz, prescale: {prescale}")
+    except Exception as e:
+        logger.warning(f"[I2C] Could not read controller 0x60 registers: {e}")
+
 except Exception as e:
     logger.error(f"[I2C] ✗ Failed to initialize MotorKit at 0x60: {e}")
     raise
@@ -66,6 +75,15 @@ try:
     logger.info("[I2C] Initializing MotorKit at address 0x61...")
     kit2 = MotorKit(address=0x61)
     logger.info("[I2C] ✓ MotorKit 0x61 initialized successfully")
+
+    # Verify I2C communication by reading PCA9685 registers
+    try:
+        freq = kit2._pca.frequency
+        prescale = kit2._pca.prescale_reg
+        logger.info(f"[I2C] Controller 0x61 - PWM freq: {freq}Hz, prescale: {prescale}")
+    except Exception as e:
+        logger.warning(f"[I2C] Could not read controller 0x61 registers: {e}")
+
 except Exception as e:
     logger.error(f"[I2C] ✗ Failed to initialize MotorKit at 0x61: {e}")
     raise
