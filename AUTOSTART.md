@@ -16,7 +16,7 @@ Two systemd services run the backend:
 ### 2. printer-manager.service
 - **Description:** Print manager and hardware controller
 - **Location:** `/etc/systemd/system/printer-manager.service`
-- **Starts:** After web app is running
+- **Starts:** After web app is running (8 second delay for Flask to initialize)
 - **User:** pidlp
 - **Logs:** `/home/pidlp/pidlp/multi-material-printer/print_manager.log`
 
@@ -87,10 +87,11 @@ sudo systemctl start printer-webapp.service printer-manager.service
 
 1. **Pi boots** → Network initializes
 2. **printer-webapp.service** starts → Flask server on port 5000
-3. **printer-manager.service** starts → Connects to web app via WebSocket
-4. **Desktop loads** (if auto-login enabled)
-5. **10 second delay**
-6. **Chromium launches** in kiosk mode → http://localhost:5000
+3. **8 second delay** → Allows Flask SocketIO server to fully initialize
+4. **printer-manager.service** starts → Connects to web app via WebSocket
+5. **Desktop loads** (if auto-login enabled)
+6. **10 second delay**
+7. **Chromium launches** in kiosk mode → http://localhost:5000
 
 ## Troubleshooting
 
