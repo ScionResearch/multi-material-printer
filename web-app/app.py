@@ -145,7 +145,7 @@ def load_network_config():
     """Load network configuration from INI file"""
     config_file = get_config_path() / 'network_settings.ini'
     config = {
-        'printer_ip': '192.168.4.3',
+        'printer_ip': '192.168.4.2',
         'printer_port': 8080,
         'wifi_ssid': '',
         'connection_timeout': 10
@@ -565,7 +565,7 @@ def api_save_network_config():
         parser = configparser.ConfigParser()
 
         parser['printer'] = {
-            'ip_address': config_data.get('printer_ip', '192.168.4.3'),
+            'ip_address': config_data.get('printer_ip', '192.168.4.2'),
             'port': str(config_data.get('printer_port', 8080)),
             'timeout': str(config_data.get('connection_timeout', 10))
         }

@@ -15,7 +15,7 @@ Key Features:
 Usage:
     manager = PrintManager()
     manager.load_recipe('recipe.txt')
-    manager.start_monitoring('192.168.4.3')
+    manager.start_monitoring('192.168.4.2')
 
     while manager.is_running():
         try:

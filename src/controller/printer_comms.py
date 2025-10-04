@@ -446,7 +446,7 @@ if __name__ == "__main__":
         print("  python printer_comms.py --auto-connect")
         print()
         print("Examples:")
-        print("  python printer_comms.py -i 192.168.4.3 -c getstatus")
+        print("  python printer_comms.py -i 192.168.4.2 -c getstatus")
         print("  python printer_comms.py --discover")
         print("  python printer_comms.py --auto-connect")
         print()
