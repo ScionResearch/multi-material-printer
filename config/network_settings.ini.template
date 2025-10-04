@@ -19,8 +19,10 @@ enabled = false
 
 [printer]
 # Printer connection settings
-# Auto-discovery will be attempted if ip_address is empty
-ip_address = "192.168.4.3"
+# IMPORTANT: Must match ESP32 gateway static IP assignment
+# ESP32 firmware assigns: Pi @ 192.168.4.3, Printer @ 192.168.4.2
+# Configure your printer with static IP 192.168.4.2, gateway 192.168.4.1
+ip_address = "192.168.4.2"
 port = 6000
 # Timeout for printer communication (seconds)
 timeout = 10

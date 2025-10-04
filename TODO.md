@@ -1,138 +1,88 @@
-# Multi-Material Printer Controller - Critical Issues TODO
 
-*Created: September 25, 2025*
+# UI issues
+- after printer stopped current layer and active material should update to cleareared (based on the status mesages sent by the printer) multi material recipe should also stop when the print is stopped.
 
+- Check that pump status is updating in the UI (pumps turning green when pump is running)
 
-## ✅ FIXES APPLIED - SEPTEMBER 25, 2025
-
-### Pause/Resume Sequence Logic (FIXED)
-- [x] **Fixed bed positioning during material changes**
-  - ✅ Enhanced material change sequence with clear step logging
-  - ✅ Extended bed rise wait time from 3 to 5 seconds
-  - ✅ Added step-by-step progress logging for better debugging
-  - ✅ Current: Pause → Wait for bed rise → Run pumps → Resume
-  - Location: `print_manager.py:357-387` - `_handle_material_change()` method
-
-### Command Recognition Errors (FIXED)
-- [x] **Fixed "goresume" command error handling**
-  - ✅ Added better error detection for "unrecognized command" responses
-  - ✅ Still returns success if response contains "OK" even with error message
-  - ✅ Confirmed `goresume` is correct command per uart-wifi documentation
-  - ✅ Added detailed error logging for debugging
-  - Location: `printer_comms.py:160-177` - `resume_print()` method
-
-### GUI Issues (FIXED)
-- [x] **Fixed stop printer popup display**
-  - ✅ Added proper message content when response is empty
-  - ✅ Enhanced popup titles and error messages
-  - ✅ Added structured logging to text browser
-  - ✅ Now shows "Stop command sent successfully" for empty responses
-  - Location: `dialog.cpp:221-237` - `on_stopPr_clicked()` method
-
-### Print Manager Exit Error (FIXED)
-- [x] **Fixed print manager error exit code handling**
-  - ✅ Added proper return values to `start_monitoring()` method
-  - ✅ Implemented clean exit codes (0 = success, 1 = error)
-  - ✅ Added success/error messages for clearer feedback
-  - ✅ Should eliminate mysterious exit code 15 errors
-  - Location: `print_manager.py:487-498` - `main()` function
-
-## ✅ COMPLETED FIXES - September 26, 2025
-
-### GUI Enhancement & Logging Issues (FIXED)
-- [x] **Improved GUI logging for better troubleshooting**
-  - ✅ Added real-time pump status visibility with [PUMP] tags
-  - ✅ Replaced annoying *** command sections with clean [TAG] formatting
-  - ✅ Enhanced visual separation with descriptive prefixes
-  - ✅ Show pump operations clearly in GUI output stream
-  - Location: `dialog.cpp` - all logging functions updated
-
-- [x] **Fixed goresume command error handling (ALREADY WORKING)**
-  - ✅ Error handling already implemented in `printer_comms.py:170-173`
-  - ✅ Code correctly handles "ERROR: unrecognized command: goresume" + "goresume,OK"
-  - ✅ Returns success when "OK" found in response despite error message
-  - ✅ This is expected behavior - printer firmware quirk, not a bug
-  - Location: `printer_comms.py:160-177` - `resume_print()` method
-
-- [x] **Fixed bed positioning sequence during material changes**
-  - ✅ Extended bed positioning wait from 5 to 20 seconds total
-  - ✅ Added detailed progress logging during bed movement
-  - ✅ Implemented robust `_wait_for_bed_raised()` method
-  - ✅ Added status verification to ensure printer remains paused
-  - ✅ Now waits properly for bed to reach top before pumps start
-  - Location: `print_manager.py:413-452` - new `_wait_for_bed_raised()` method
-
-- [x] **Added automatic status polling to GUI**
-  - ✅ Automatic status updates every 5 seconds during printing
-  - ✅ Shows concise "[AUTO] Status: PRINT | Layer: 45 | Progress: 15%" format
-  - ✅ Starts when print manager starts, stops when finished
-  - ✅ Eliminates need for manual "Check Status" clicking
-  - Location: `dialog.cpp:90-132` - `autoStatusUpdate()` method
-
-### Investigation Tasks
-- [x] **Analyze print manager logs for error patterns**
-  - ✅ Reviewed complete log output for error sequence
-  - ✅ Identified exit code 15 caused by unhandled exceptions in main()
-  - ✅ Added proper exception handling and return codes
-
-### Command Protocol Review
-- [x] **Verify printer communication protocol**
-  - ✅ Confirmed "goresume" is correct per uart-wifi library documentation
-  - ✅ Reviewed printer firmware documentation in anycubic_python_uart_wifi.md
-  - ✅ Enhanced error handling instead of changing commands
-
-## 🧪 TESTING REQUIREMENTS
-
-### Workflow Testing
-- [ ] **Test complete print workflow end-to-end**
-  1. Connect to printer status
-  2. Get files list
-  3. Start MMU controller
-  4. Begin print with material changes
-  5. Verify proper pause/resume sequence
-  6. Test stop functionality
 
 ### Material Change Testing
-- [ ] **Validate material change sequence**
+- [x] **Validate material change sequence**
   - Monitor bed position during material changes
   - Verify pump operation timing
   - Confirm proper resume after material change
 
----
+### Log Analysis Issues (from 2025-10-04 test) - INVESTIGATED
 
-## ✅ COMPLETION CRITERIA - ALL COMPLETED
+#### 🔴 Critical Priority
 
-- [x] **GUI Improvements:**
-  - [x] Real-time pump status visible in GUI output with [PUMP] tags
-  - [x] Clean log formatting with [TAG] prefixes instead of *** sections
-  - [x] Automatic status polling every 5 seconds during printing
-  - [x] Short status display showing layer, status, progress only
+##### **Resume Command Issue** - printer_comms.py
+**Root Cause:** The `goresume` command IS valid, but uart-wifi library doesn't recognize it
+- Line 452 in uart_wifi/communication.py prints "unrecognized command" to stderr when command not in recognized list
+- However, printer DOES process it (returns "goresume,OK" on second line)
+- Library still wraps it as InvalidResponse and returns it
+**Files:**
+- src/controller/printer_comms.py:146 (sends goresume)
+- uart_wifi library communication.py:452 (unrecognized command handler)
+**Impact:** Cosmetic error in logs, command actually works
+**Evidence:** All 3 material changes completed successfully despite "unrecognized" message
 
-- [x] **Print Process:**
-  - [x] Material changes execute with proper bed positioning (20-second wait)
-  - [x] Bed positioning verified before pump operations begin
-  - [x] Pump sequence runs with bed in raised position
-  - [x] Print resumes cleanly after material change
+##### **Printer Disconnections After Resume** - print_manager.py
+**Root Cause:** NOT related to invalid command (see above - command works)
+- Disconnection pattern: 15s after each resume (1759544881→1759544896, 1759544955→1759544970)
+- Likely printer firmware behavior after receiving certain commands
+- System recovers automatically within 5s
+**Files:** src/controller/print_manager.py (monitoring loop)
+**Impact:** Temporary loss of visibility, no functional impact
+**Evidence:** Print continues normally, status resumes after reconnect
 
-- [x] **Error Resolution:**
-  - [x] "unrecognized command: goresume" errors properly handled (expected behavior)
-  - [x] Print manager should exit cleanly (exit code 0) - previously fixed
-  - [x] Complete print workflow enhanced with better logging and timing
+#### 🟡 Medium Priority
 
-## 🔧 TECHNICAL NOTES
+##### **Duplicate Command Processing** - websocket_ipc.py + print_manager.py
+**Root Cause:** Commands processed TWICE - via callback AND queue
+- websocket_ipc.py:165: Adds command to queue
+- websocket_ipc.py:169: Calls on_command_received callback (processes command #1)
+- print_manager.py:190: Registers callback = _handle_websocket_command
+- print_manager.py:533: Also calls get_next_command() from queue (processes command #2)
+**Files:**
+- src/controller/websocket_ipc.py:165-169 (dual processing)
+- src/controller/print_manager.py:190, 533 (both handlers active)
+**Impact:** Doubles log entries (1210→605 lines), potential race conditions
+**Evidence:** Every command shows twice in logs 0.3s apart with identical timestamps
 
+##### **Quiescent Window Not Enforced** - print_manager.py:_pause_printer() + _handle_material_change()
+**Root Cause:** Window DECLARED but not WAITED before bed positioning
+- print_manager.py:763: Sets `_quiescent_until = time.time() + 10`
+- print_manager.py:764: Logs "Quiescent window started..."
+- print_manager.py:709: Immediately calls `_wait_for_bed_raised()` (NO WAIT!)
+- _wait_for_bed_raised():796: First actual sleep is 2s (for pause command propagation)
+**Files:**
+- src/controller/print_manager.py:753-768 (_pause_printer)
+- src/controller/print_manager.py:708-709 (_handle_material_change)
+- src/controller/print_manager.py:790-823 (_wait_for_bed_raised)
+**Impact:** Quiescent window never prevents printer polling as intended
+**Evidence:** Logs show all three events at same timestamp (1759544828.0)
 
+##### **Excessive SocketIO Logging** - websocket_ipc.py + app.py
+**Root Cause:** SocketIO library logger enabled on BOTH client and server
+- websocket_ipc.py:92: Client has `logger=True` (hardcoded)
+- app.py:70-71: Server has `logger=_debug_socket` (conditional on MMU_SOCKET_DEBUG)
+- Each emit/receive logs twice (once from client, once from server)
+**Files:**
+- src/controller/websocket_ipc.py:92 (client logger=True)
+- web-app/app.py:70-71 (server logger config)
+**Impact:** 67% of log lines are SocketIO emissions
+**Evidence:** Every status update shows:
+  ```
+  Emitting event "status_update" [/]
+  [INFO] Emitting event "status_update" [/]
+  ```
 
-**Error Pattern:**
-```
-ERROR: unrecognized command: goresume
-goresume,OK
-(repeated 3 times)
-```
+#### 🟢 Low Priority
 
-**Exit Status:**
-```
-=== PRINT MANAGER FINISHED ===
-Exit code: 15
-Print manager exited with error
-```
+##### **Pump Config Reload Logging** - mmu_control.py
+**Observation:** Config logged once at first material change, silent thereafter
+- Could be single load (cached) or reloaded silently
+**Files:** src/controller/mmu_control.py (change_material function)
+**Impact:** None - pump operations consistent across all changes
+**Evidence:** Step counts vary <1.5%, suggesting config is stable
+

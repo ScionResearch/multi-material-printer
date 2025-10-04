@@ -1,4 +1,20 @@
 #!/usr/bin/env python3
+# --- Early async mode selection & optional eventlet monkey patch -----------------
+# CRITICAL: This block MUST be at the very top, before ANY other imports
+# eventlet.monkey_patch() modifies the standard library and must run before
+# any modules (especially flask, socket, threading) are imported.
+import os
+ASYNC_MODE = os.environ.get("MMU_SOCKET_ASYNC", "eventlet")
+if ASYNC_MODE == "eventlet":
+    try:
+        import eventlet  # type: ignore
+        eventlet.monkey_patch()
+    except Exception as e:
+        print(f"Monkey patching failed: {e}. Falling back to threading.")
+        ASYNC_MODE = "threading"
+elif ASYNC_MODE not in {"gevent", "threading"}:
+    ASYNC_MODE = "threading"
+
 """
 Scion Multi-Material Printer Web Interface
 
@@ -16,7 +32,6 @@ Author: Claude Code Assistant
 License: MIT
 """
 
-import os
 import sys
 import json
 import threading
@@ -25,25 +40,40 @@ from pathlib import Path
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask_socketio import SocketIO, emit
-import subprocess
+import subprocess  # TODO: remove if no longer needed after full refactor (left temporarily for any remaining usage)
 
 # Add the controller modules to the Python path
 sys.path.append(str(Path(__file__).parent.parent / 'src' / 'controller'))
 
 # Import existing controller modules
 try:
-    import printer_comms
-    import mmu_control
-    import photonmmu_pump
+    import printer_comms, mmu_control, photonmmu_pump
     CONTROLLERS_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Could not import controller modules: {e}")
     print("Make sure you're running from the Raspberry Pi with the controller modules installed")
     CONTROLLERS_AVAILABLE = False
 
+# WebSocket-based IPC replaces file-based shared_status
+# Status and commands are now handled via SocketIO events
+print("Using WebSocket-based IPC system (shared_status deprecated)")
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'scion-mmu-controller-secret-key'
-socketio = SocketIO(app, cors_allowed_origins="*")
+
+# SocketIO tuning: reduce log verbosity (can re-enable with MMU_SOCKET_DEBUG=1)
+_debug_socket = os.environ.get("MMU_SOCKET_DEBUG") == "1"
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode=ASYNC_MODE,
+    logger=_debug_socket,
+    engineio_logger=_debug_socket,
+    ping_interval=25,      # seconds between pings
+    ping_timeout=60,       # timeout before considering a client gone (must be > ping_interval)
+    max_http_buffer_size=1_000_000,
+    cookie=None            # stateless; avoid sticky session issues for kiosk browsers
+)
 
 # Global variables for application state
 current_status = {
@@ -56,11 +86,28 @@ current_status = {
     'next_material': 'None',
     'next_change_layer': 0,
     'mm_active': False,
-    'last_update': datetime.now().isoformat()
+    'last_update': datetime.now().isoformat(),
+    # Enhanced timing and progress tracking
+    'current_operation': 'idle',
+    'operation_start_time': None,
+    'operation_duration': 0,
+    'estimated_completion': None,
+    'pump_status': {
+        'pump_a': 'idle',
+        'pump_b': 'idle',
+        'pump_c': 'idle',
+        'drain_pump': 'idle'
+    },
+    'sequence_progress': {
+        'current_step': 0,
+        'total_steps': 0,
+        'step_name': '',
+        'step_progress': 0
+    }
 }
 
-status_monitor_thread = None
-status_monitor_running = False
+status_monitor_thread = None  # deprecated (will be removed)
+status_monitor_running = False  # deprecated
 
 def get_config_path():
     """Get the configuration directory path"""
@@ -82,6 +129,96 @@ def load_recipe():
         except Exception as e:
             print(f"Error loading recipe: {e}")
     return []
+
+def load_pump_config():
+    """Load pump configuration from JSON file"""
+    config_file = get_config_path() / 'pump_profiles.json'
+    if config_file.exists():
+        try:
+            with open(config_file, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading pump config: {e}")
+    return get_default_pump_config()
+
+def load_network_config():
+    """Load network configuration from INI file"""
+    config_file = get_config_path() / 'network_settings.ini'
+    config = {
+        'printer_ip': '192.168.4.2',
+        'printer_port': 8080,
+        'wifi_ssid': '',
+        'connection_timeout': 10
+    }
+
+    if config_file.exists():
+        try:
+            import configparser
+            parser = configparser.ConfigParser()
+            parser.read(config_file)
+
+            if 'printer' in parser:
+                config['printer_ip'] = parser.get('printer', 'ip_address', fallback=config['printer_ip'])
+                config['printer_port'] = parser.getint('printer', 'port', fallback=config['printer_port'])
+                config['connection_timeout'] = parser.getint('printer', 'timeout', fallback=config['connection_timeout'])
+
+            if 'network' in parser:
+                config['wifi_ssid'] = parser.get('network', 'ssid', fallback=config['wifi_ssid'])
+        except Exception as e:
+            print(f"Error loading network config: {e}")
+
+    return config
+
+def get_default_pump_config():
+    """Get default pump configuration"""
+    return {
+        "pumps": {
+            "pump_a": {
+                "name": "Pump A",
+                "description": "Primary material pump",
+                "flow_rate_ml_per_second": 2.5,
+                "max_volume_ml": 500,
+                "calibration": {"steps_per_ml": 100, "last_calibrated": None}
+            },
+            "pump_b": {
+                "name": "Pump B",
+                "description": "Secondary material pump",
+                "flow_rate_ml_per_second": 2.5,
+                "max_volume_ml": 500,
+                "calibration": {"steps_per_ml": 100, "last_calibrated": None}
+            },
+            "pump_c": {
+                "name": "Pump C",
+                "description": "Third material pump",
+                "flow_rate_ml_per_second": 2.5,
+                "max_volume_ml": 500,
+                "calibration": {"steps_per_ml": 100, "last_calibrated": None}
+            },
+            "drain_pump": {
+                "name": "Drain Pump",
+                "description": "Vat drainage pump",
+                "flow_rate_ml_per_second": 5.0,
+                "max_volume_ml": 1000,
+                "calibration": {"steps_per_ml": 80, "last_calibrated": None}
+            }
+        },
+        "material_change": {
+            "drain_volume_ml": 50,
+            "fill_volume_ml": 45,
+            "mixing_time_seconds": 10,
+            "settle_time_seconds": 5
+        },
+        "safety": {
+            "max_pump_runtime_seconds": 300,
+            "emergency_stop_enabled": True,
+            "sensor_check_interval_seconds": 1
+        },
+        "maintenance": {
+            "pump_cycle_count": {"pump_a": 0, "pump_b": 0, "pump_c": 0, "drain_pump": 0},
+            "last_maintenance_date": None,
+            "maintenance_interval_cycles": 1000
+        }
+    }
 
 def parse_recipe(recipe_text):
     """Parse recipe text format (A,50:B,120:C,200) into structured data"""
@@ -117,19 +254,7 @@ def save_recipe(recipe_data):
         return False
 
 def get_printer_status():
-    """Get current printer status using existing controller"""
-    if not CONTROLLERS_AVAILABLE:
-        return None
-
-    try:
-        # Use existing printer communications module
-        status_response = printer_comms.get_status()
-        if status_response:
-            # Parse the status response (this will need adjustment based on actual format)
-            return parse_printer_status(status_response)
-    except Exception as e:
-        print(f"Error getting printer status: {e}")
-
+    """Deprecated: Printer status now pushed from print_manager via WebSocket."""
     return None
 
 def parse_printer_status(status_text):
@@ -145,62 +270,40 @@ def parse_printer_status(status_text):
         status['connected'] = False
         return status
 
-    # Parse status text - adapt based on actual uart-wifi response format
-    lines = status_text.strip().split('\n')
-    for line in lines:
-        line = line.strip().lower()
-        if 'status:' in line:
-            status['state'] = line.split(':', 1)[1].strip()
-        elif 'current_layer:' in line:
-            try:
-                status['layer'] = int(line.split(':', 1)[1].strip())
-            except ValueError:
-                pass
-        elif 'percent_complete:' in line:
-            try:
-                status['progress'] = float(line.split(':', 1)[1].strip())
-            except ValueError:
-                pass
+    # Handle both object and string responses
+    if hasattr(status_text, 'status'):
+        # Handle MonoXStatus object directly
+        status['state'] = getattr(status_text, 'status', 'Unknown')
+        status['layer'] = getattr(status_text, 'current_layer', 0)
+        status['progress'] = getattr(status_text, 'percent_complete', 0)
+    else:
+        # Parse string format
+        lines = str(status_text).strip().split('\n')
+        for line in lines:
+            line = line.strip().lower()
+            if 'status:' in line:
+                status['state'] = line.split(':', 1)[1].strip()
+            elif any(x in line for x in ['current_layer:', 'current_lay:', 'layer:']):
+                try:
+                    import re
+                    match = re.search(r'(\d+)', line)
+                    if match:
+                        status['layer'] = int(match.group(1))
+                except ValueError:
+                    pass
+            elif 'percent' in line:
+                try:
+                    import re
+                    match = re.search(r'(\d+(?:\.\d+)?)', line)
+                    if match:
+                        status['progress'] = float(match.group(1))
+                except ValueError:
+                    pass
 
     return status
 
-def status_monitor():
-    """Background thread to monitor printer status"""
-    global status_monitor_running, current_status
-
-    while status_monitor_running:
-        try:
-            # Get printer status
-            printer_status = get_printer_status()
-            if printer_status:
-                current_status.update({
-                    'printer_connected': printer_status['connected'],
-                    'printer_status': printer_status['state'],
-                    'current_layer': printer_status['layer'],
-                    'progress_percent': printer_status['progress'],
-                    'last_update': datetime.now().isoformat()
-                })
-
-                # Check recipe for next material change
-                recipe = load_recipe()
-                if recipe:
-                    for item in recipe:
-                        if item['layer'] > current_status['current_layer']:
-                            current_status['next_material'] = item['material']
-                            current_status['next_change_layer'] = item['layer']
-                            break
-                    else:
-                        current_status['next_material'] = 'None'
-                        current_status['next_change_layer'] = 0
-
-                # Emit status update to connected clients
-                socketio.emit('status_update', current_status)
-
-            time.sleep(2)  # Update every 2 seconds
-
-        except Exception as e:
-            print(f"Error in status monitor: {e}")
-            time.sleep(5)  # Wait longer on error
+def status_monitor():  # deprecated
+    return
 
 @app.route('/')
 def index():
@@ -220,6 +323,15 @@ def recipe_page():
 def manual_page():
     """Manual controls page"""
     return render_template('manual.html', status=current_status)
+
+@app.route('/config')
+def config_page():
+    """Configuration management page"""
+    pump_config = load_pump_config()
+    network_config = load_network_config()
+    return render_template('config.html',
+                         pump_config=pump_config,
+                         network_config=network_config)
 
 @app.route('/api/recipe', methods=['POST'])
 def api_save_recipe():
@@ -246,30 +358,20 @@ def api_status():
 
 @app.route('/api/printer/<action>', methods=['POST'])
 def api_printer_control(action):
-    """API endpoint for printer control commands"""
-    if not CONTROLLERS_AVAILABLE:
-        return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
+    """API endpoint for printer control commands (delegated)."""
+    valid = {'pause': 'pause_print', 'resume': 'resume_print', 'stop': 'stop_print'}
+    if action not in valid:
+        return jsonify({'success': False, 'message': 'Invalid action'}), 400
 
-    try:
-        if action == 'pause':
-            result = printer_comms.pause_print()
-        elif action == 'resume':
-            result = printer_comms.resume_print()
-        elif action == 'stop':
-            result = printer_comms.stop_print()
-        else:
-            return jsonify({'success': False, 'message': 'Invalid action'}), 400
+    command_id = send_command_to_print_manager(valid[action], {})
+    if not command_id:
+        return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
 
-        return jsonify({'success': result, 'action': action})
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+    return jsonify({'success': True, 'action': action, 'command_id': command_id})
 
 @app.route('/api/pump', methods=['POST'])
 def api_pump_control():
     """API endpoint for manual pump control"""
-    if not CONTROLLERS_AVAILABLE:
-        return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
-
     try:
         data = request.json
         motor = data.get('motor', '').upper()
@@ -286,37 +388,46 @@ def api_pump_control():
         if duration <= 0 or duration > 300:  # Max 5 minutes
             return jsonify({'success': False, 'message': 'Invalid duration (1-300 seconds)'}), 400
 
-        # Execute pump command using existing photonmmu_pump module
-        result = photonmmu_pump.run_stepper(motor, direction, duration)
+        # Use new WebSocket communication for pump control
+        command_id = send_command_to_print_manager('pump_control', {
+            'motor': motor,
+            'direction': direction,
+            'duration': duration
+        })
 
-        return jsonify({'success': True, 'message': f'Pump {motor} running {direction} for {duration}s'})
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+
+        return jsonify({
+            'success': True,
+            'message': f'Pump {motor} command sent ({direction} for {duration}s)',
+            'command_id': command_id
+        })
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/multi-material/start', methods=['POST'])
 def api_start_multi_material():
     """API endpoint to start multi-material printing"""
-    if not CONTROLLERS_AVAILABLE:
-        return jsonify({'success': False, 'message': 'Controller modules not available'}), 503
-
     try:
-        # This would start the print_manager.py process in the background
         recipe_path = get_recipe_path()
         if not recipe_path.exists():
             return jsonify({'success': False, 'message': 'No recipe file found'}), 400
 
-        # Start print manager in background thread
-        print_manager_thread = threading.Thread(
-            target=run_print_manager,
-            args=(str(recipe_path),),
-            daemon=True
-        )
-        print_manager_thread.start()
+        # Use new WebSocket communication instead of file-based shared_status
+        command_id = send_command_to_print_manager('start_multi_material', {
+            'recipe_path': str(recipe_path)
+        })
 
-        current_status['mm_active'] = True
-        socketio.emit('status_update', current_status)
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
 
-        return jsonify({'success': True, 'message': 'Multi-material printing started'})
+        return jsonify({
+            'success': True,
+            'message': 'Multi-material printing start requested',
+            'command_id': command_id
+        })
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
@@ -324,11 +435,45 @@ def api_start_multi_material():
 def api_stop_multi_material():
     """API endpoint to stop multi-material printing"""
     try:
-        # This would stop the print_manager.py process
-        current_status['mm_active'] = False
-        socketio.emit('status_update', current_status)
+        command_id = send_command_to_print_manager('stop_multi_material', {})
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+        return jsonify({'success': True, 'message': 'Stop requested', 'command_id': command_id})
 
-        return jsonify({'success': True, 'message': 'Multi-material printing stopped'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/sequence/material-change', methods=['POST'])
+def api_material_change_sequence():
+    """API endpoint to run complete material change sequence"""
+    try:
+        data = request.json or {}
+        target_material = data.get('target_material')
+        sequence_config = data.get('config', {})
+
+        if not target_material:
+            return jsonify({'success': False, 'message': 'Target material is required'}), 400
+
+        if target_material not in ['A', 'B', 'C', 'D']:
+            return jsonify({'success': False, 'message': 'Invalid target material'}), 400
+
+        # Use helper to ensure print manager connection and consistent command handling
+        command_id = send_command_to_print_manager('run_material_change', {
+            'target_material': target_material,
+            'drain_time': sequence_config.get('drain_time', 30),
+            'fill_time': sequence_config.get('fill_time', 25),
+            'settle_time': sequence_config.get('settle_time', 5)
+        })
+
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+
+        return jsonify({
+            'success': True,
+            'message': f'Material change sequence to {target_material} started',
+            'command_id': command_id
+        })
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
@@ -336,8 +481,15 @@ def api_stop_multi_material():
 def api_emergency_stop():
     """API endpoint for emergency stop"""
     try:
-        # Stop all pumps and processes
-        current_status['mm_active'] = False
+        # Use shared command system for emergency stop
+        # Send emergency stop command via WebSocket to print manager
+        command_data = {
+            'type': 'emergency_stop',
+            'parameters': {},
+            'timestamp': datetime.now().isoformat()
+        }
+        socketio.emit('command', command_data)
+
         socketio.emit('system_alert', {
             'message': 'Emergency stop activated',
             'type': 'danger'
@@ -347,99 +499,571 @@ def api_emergency_stop():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/config/pump', methods=['GET'])
+def api_get_pump_config():
+    """API endpoint to get pump configuration"""
+    try:
+        config = load_pump_config()
+        return jsonify(config)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/config/pump', methods=['POST'])
+def api_save_pump_config():
+    """API endpoint to save pump configuration"""
+    try:
+        config_data = request.json or {}
+        config_file = get_config_path() / 'pump_profiles.json'
+
+        # Validate configuration structure
+        if not validate_pump_config(config_data):
+            return jsonify({'success': False, 'message': 'Invalid pump configuration format'}), 400
+
+        # Create backup
+        backup_file = get_config_path() / f'pump_profiles_backup_{int(time.time())}.json'
+        if config_file.exists():
+            import shutil
+            shutil.copy2(config_file, backup_file)
+
+        # Save new configuration
+        with open(config_file, 'w') as f:
+            json.dump(config_data, f, indent=2)
+
+        socketio.emit('system_alert', {
+            'message': 'Pump configuration saved successfully',
+            'type': 'success'
+        })
+
+        return jsonify({'success': True, 'message': 'Pump configuration saved successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/config/network', methods=['GET'])
+def api_get_network_config():
+    """API endpoint to get network configuration"""
+    try:
+        config = load_network_config()
+        return jsonify(config)
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/config/network', methods=['POST'])
+def api_save_network_config():
+    """API endpoint to save network configuration"""
+    try:
+        config_data = request.json or {}
+        config_file = get_config_path() / 'network_settings.ini'
+
+        # Create backup
+        backup_file = get_config_path() / f'network_settings_backup_{int(time.time())}.ini'
+        if config_file.exists():
+            import shutil
+            shutil.copy2(config_file, backup_file)
+
+        # Create INI configuration
+        import configparser
+        parser = configparser.ConfigParser()
+
+        parser['printer'] = {
+            'ip_address': config_data.get('printer_ip', '192.168.4.2'),
+            'port': str(config_data.get('printer_port', 8080)),
+            'timeout': str(config_data.get('connection_timeout', 10))
+        }
+
+        parser['network'] = {
+            'ssid': config_data.get('wifi_ssid', '')
+        }
+
+        # Save configuration
+        with open(config_file, 'w') as f:
+            parser.write(f)
+
+        socketio.emit('system_alert', {
+            'message': 'Network configuration saved successfully',
+            'type': 'success'
+        })
+
+        return jsonify({'success': True, 'message': 'Network configuration saved successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/config/test-connection', methods=['POST'])
+def api_test_connection():
+    """API endpoint to test printer connection (delegated to print_manager)"""
+    try:
+        # Get printer IP from request or config
+        printer_ip = request.json.get('printer_ip') if request.json else None
+        if not printer_ip:
+            network_config = load_network_config()
+            printer_ip = network_config['printer_ip']
+
+        # Delegate to print_manager via WebSocket
+        command_id = send_command_to_print_manager('test_connection', {'printer_ip': printer_ip})
+        
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+        
+        # Return immediately - result will be sent via WebSocket event
+        return jsonify({
+            'success': True,
+            'message': 'Connection test requested',
+            'command_id': command_id,
+            'ip': printer_ip
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/printer/files', methods=['GET'])
+def api_get_printer_files():
+    """API endpoint to get list of print files from printer (delegated to print_manager)"""
+    try:
+        # Delegate to print_manager via WebSocket
+        command_id = send_command_to_print_manager('get_files', {})
+        
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+        
+        # Result will be sent back via 'file_list_response' WebSocket event
+        return jsonify({
+            'success': True,
+            'message': 'File list requested',
+            'command_id': command_id
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/health')
+def api_health():
+    """Lightweight health/diagnostic endpoint for monitoring & readiness probes.
+
+    Returns basic server, controller, and websocket statistics so external
+    supervisors (systemd, k8s probe, etc.) can judge liveness without invoking
+    heavier routes or establishing a Socket.IO session.
+    """
+    try:
+        pm_connected = connected_clients['print_manager'] is not None
+        return jsonify({
+            'ok': True,
+            'server_time': datetime.utcnow().isoformat() + 'Z',
+            'async_mode': ASYNC_MODE,
+            'print_manager_connected': pm_connected,
+            'web_client_count': len(connected_clients['web_clients']),
+            'connected_client_ids_sample': list(connected_clients['web_clients'])[:5]
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+@app.route('/api/printer/start-print', methods=['POST'])
+def api_start_printer_print():
+    """API endpoint to start printing a file on the printer"""
+    try:
+        data = request.json or {}
+        filename = data.get('filename')
+        if not filename:
+            return jsonify({'success': False, 'message': 'Filename is required'}), 400
+        command_id = send_command_to_print_manager('start_printer_print', {'filename': filename})
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+        return jsonify({'success': True, 'message': f'Print start requested: {filename}', 'command_id': command_id})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/logging/config', methods=['GET'])
+def api_get_logging_config():
+    """API endpoint to get logging configuration"""
+    try:
+        # Try to get config from logging_config module
+        if 'logging_config' in sys.modules:
+            config = sys.modules['logging_config'].get_logging_config()
+            return jsonify(config)
+        else:
+            # Return default config
+            return jsonify({
+                'levels': {
+                    'print_manager': 'INFO',
+                    'mmu_control': 'INFO',
+                    'pump_control': 'INFO',
+                    'printer_comms': 'INFO',
+                    'web_interface': 'INFO'
+                },
+                'outputs': {
+                    'console': True,
+                    'file': False,
+                    'web_stream': True
+                }
+            })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/logging/config', methods=['POST'])
+def api_save_logging_config():
+    """API endpoint to save logging configuration"""
+    try:
+        config_data = request.json
+
+        # Try to update logging configuration
+        if 'logging_config' in sys.modules:
+            sys.modules['logging_config'].configure_logging(config_data)
+
+        # Also store in session for immediate use
+        socketio.emit('system_alert', {
+            'message': 'Logging configuration updated',
+            'type': 'success'
+        })
+
+        return jsonify({'success': True, 'message': 'Logging configuration saved'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/logging/recent', methods=['GET'])
+def api_get_recent_logs():
+    """API endpoint to get recent log entries"""
+    try:
+        count = request.args.get('count', 100, type=int)
+
+        if 'logging_config' in sys.modules:
+            logs = sys.modules['logging_config'].get_recent_logs(count)
+            return jsonify(logs)
+        else:
+            # Return sample logs if logging module not available
+            return jsonify([
+                {
+                    'timestamp': datetime.now().isoformat(),
+                    'level': 'INFO',
+                    'logger': 'web_interface',
+                    'message': 'Web interface initialized'
+                }
+            ])
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/logging/level', methods=['POST'])
+def api_set_log_level():
+    """API endpoint to change log level for a component"""
+    try:
+        data = request.json or {}
+        component = data.get('component')
+        level = data.get('level')
+
+        if not component or not level:
+            return jsonify({'success': False, 'message': 'Component and level required'}), 400
+
+        if 'logging_config' in sys.modules:
+            sys.modules['logging_config'].set_log_level(component, level)
+
+        socketio.emit('log_message', {
+            'level': 'info',
+            'message': f'Log level for {component} changed to {level}',
+            'timestamp': datetime.now().isoformat()
+        })
+
+        return jsonify({'success': True, 'message': f'Log level updated for {component}'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+def validate_pump_config(config):
+    """Validate pump configuration structure"""
+    try:
+        required_keys = ['pumps', 'material_change', 'safety', 'maintenance']
+        if not all(key in config for key in required_keys):
+            return False
+
+        # Validate pump entries
+        for pump_id, pump_data in config['pumps'].items():
+            required_pump_keys = ['name', 'description', 'flow_rate_ml_per_second', 'max_volume_ml', 'calibration']
+            if not all(key in pump_data for key in required_pump_keys):
+                return False
+
+            # Validate data types
+            if not isinstance(pump_data['flow_rate_ml_per_second'], (int, float)):
+                return False
+            if not isinstance(pump_data['max_volume_ml'], (int, float)):
+                return False
+
+        return True
+    except Exception:
+        return False
+
+def setup_logging_integration():
+    """Setup integration with controller logging system"""
+    try:
+        # Import logging configuration module
+        sys.path.append(str(Path(__file__).parent.parent / 'src' / 'controller'))
+        import logging_config
+
+        # Set up web callback for real-time log streaming AND console mirroring
+        def web_log_callback(level, message):
+            # Print to console with color coding
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            level_colors = {
+                'debug': '\033[36m',    # Cyan
+                'info': '\033[32m',     # Green
+                'warning': '\033[33m',  # Yellow
+                'error': '\033[31m',    # Red
+                'critical': '\033[35m'  # Magenta
+            }
+            reset = '\033[0m'
+            color = level_colors.get(level.lower(), '')
+
+            # Print to console
+            print(f"{color}[{timestamp}] {level.upper()}: {message}{reset}")
+
+            # Emit to web interface
+            socketio.emit('log_message', {
+                'level': level,
+                'message': message,
+                'timestamp': datetime.now().isoformat()
+            })
+
+        logging_config.set_web_callback(web_log_callback)
+
+        # Also setup a logger for the web interface itself
+        web_logger = logging_config.setup_logging('web_interface', level='INFO')
+        web_logger.info("Web interface logging initialized")
+
+        return True
+    except Exception as e:
+        print(f"Could not setup logging integration: {e}")
+        return False
+
+# Diagnostic and Calibration API Endpoints
+
+@app.route('/api/diagnostics/i2c', methods=['POST'])
+def api_test_i2c():
+    """API endpoint to test I2C communication with motor controllers"""
+    try:
+        command_id = send_command_to_print_manager('test_i2c', {})
+        if command_id:
+            return jsonify({'success': True, 'message': 'I2C test initiated', 'command_id': command_id})
+        else:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/diagnostics/gpio', methods=['POST'])
+def api_test_gpio():
+    """API endpoint to test GPIO pin accessibility"""
+    try:
+        command_id = send_command_to_print_manager('test_gpio', {})
+        if command_id:
+            return jsonify({'success': True, 'message': 'GPIO test initiated', 'command_id': command_id})
+        else:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/diagnostics/pumps', methods=['POST'])
+def api_test_pump_motors():
+    """API endpoint to test all pump motor connectivity"""
+    try:
+        command_id = send_command_to_print_manager('test_pump_motors', {})
+        if command_id:
+            return jsonify({'success': True, 'message': 'Pump motor test initiated', 'command_id': command_id})
+        else:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/diagnostics/full', methods=['POST'])
+def api_run_full_diagnostics():
+    """API endpoint to run comprehensive system diagnostics"""
+    try:
+        command_id = send_command_to_print_manager('run_full_diagnostics', {})
+        if command_id:
+            return jsonify({'success': True, 'message': 'Full diagnostics initiated', 'command_id': command_id})
+        else:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/calibration/pumps', methods=['POST'])
+def api_calibrate_pumps():
+    """API endpoint to start pump calibration wizard"""
+    try:
+        data = request.json or {}
+        command_id = send_command_to_print_manager('calibrate_pumps', data)
+        if command_id:
+            return jsonify({'success': True, 'message': 'Pump calibration started', 'command_id': command_id})
+        else:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/calibration/pump/<pump_id>', methods=['POST'])
+def api_calibrate_single_pump(pump_id):
+    """API endpoint to calibrate a specific pump"""
+    try:
+        data = request.json or {}
+        data['pump_id'] = pump_id
+        command_id = send_command_to_print_manager('calibrate_single_pump', data)
+        if command_id:
+            return jsonify({'success': True, 'message': f'Calibration started for pump {pump_id}', 'command_id': command_id})
+        else:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+# Global tracking for connected clients
+connected_clients = {
+    'print_manager': None,
+    'web_clients': set()
+}
+
 @socketio.on('connect')
 def handle_connect():
     """Handle client connection for WebSocket"""
-    print('Client connected')
+    # Flask-SocketIO provides request.sid at runtime; ignore static type checker
+    sid = getattr(request, 'sid', None)  # type: ignore[attr-defined]
+    if sid:
+        if _debug_socket:
+            print(f'Client connected: {sid}')
+        connected_clients['web_clients'].add(sid)
     emit('status_update', current_status)
+
+    # Immediately inform the new client of the controller connection state so
+    # the UI can render an accurate indicator without waiting for another
+    # heartbeat from the print manager.
+    emit('system_status', {
+        'print_manager_connected': connected_clients['print_manager'] is not None,
+        'timestamp': datetime.now().isoformat()
+    }, to=sid)
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""
-    print('Client disconnected')
+    sid = getattr(request, 'sid', None)  # type: ignore[attr-defined]
+    if sid:
+        if _debug_socket:
+            print(f'Client disconnected: {sid}')
+        connected_clients['web_clients'].discard(sid)
+        if connected_clients['print_manager'] == sid:
+            connected_clients['print_manager'] = None
+            if _debug_socket:
+                print('Print manager disconnected')
+            emit('system_status', {
+                'print_manager_connected': False,
+                'timestamp': datetime.now().isoformat()
+            }, broadcast=True)
 
-def start_status_monitor():
-    """Start the background status monitoring thread"""
-    global status_monitor_thread, status_monitor_running
+@socketio.on('client_register')
+def handle_client_register(data):
+    """Handle client registration (print manager identification)"""
+    if _debug_socket:
+        print(f"[DEBUG] client_register event received! Data: {data}")
+    client_type = data.get('client_type') if isinstance(data, dict) else None
+    sid = getattr(request, 'sid', None)  # type: ignore[attr-defined]
+    if _debug_socket:
+        print(f"Client registration: {client_type} from {sid}")
 
-    if status_monitor_thread is None or not status_monitor_thread.is_alive():
-        status_monitor_running = True
-        status_monitor_thread = threading.Thread(target=status_monitor, daemon=True)
-        status_monitor_thread.start()
-        print("Status monitor started")
+    if client_type == 'print_manager' and sid:
+        connected_clients['print_manager'] = sid
+        print('Print manager registered and connected')
+        emit('system_status', {
+            'print_manager_connected': True,
+            'timestamp': datetime.now().isoformat()
+        }, broadcast=True)
 
-def stop_status_monitor():
-    """Stop the background status monitoring thread"""
-    global status_monitor_running
-    status_monitor_running = False
-    print("Status monitor stopped")
+@socketio.on('command_result')
+def handle_command_result(data):
+    """Handle command result from print manager"""
+    command_id = data.get('command_id')
+    success = data.get('success')
+    result = data.get('result', '')
 
-def run_print_manager(recipe_path):
-    """Run the print manager in a separate process"""
-    try:
-        # Get printer IP from config
-        config_path = get_config_path() / 'network_settings.ini'
-        printer_ip = '192.168.4.3'  # Default
+    print(f"Command {command_id} result: {'SUCCESS' if success else 'FAILED'} - {result}")
 
-        if config_path.exists():
-            import configparser
-            config = configparser.ConfigParser()
-            config.read(config_path)
-            printer_ip = config.get('printer', 'ip_address', fallback='192.168.4.3')
+    # Broadcast result to web clients
+    emit('command_completed', {
+        'command_id': command_id,
+        'success': success,
+        'result': result,
+        'timestamp': datetime.now().isoformat()
+    }, broadcast=True, include_self=False)
 
-        # Build command to run print manager
-        controller_dir = Path(__file__).parent.parent / 'src' / 'controller'
-        script_path = controller_dir / 'print_manager.py'
+@socketio.on('status_update')
+def handle_status_update_from_manager(data):
+    """Handle status updates from print manager"""
+    component = data.get('component', 'UNKNOWN')
+    status = data.get('status', '')
+    level = data.get('level', 'info')
+    timestamp = data.get('timestamp', datetime.now().isoformat())
 
-        cmd = [
-            'python3', str(script_path),
-            '--recipe', recipe_path,
-            '--printer-ip', printer_ip
-        ]
+    print(f"[{component}] {status}")
 
-        # Run print manager and capture output
-        process = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=str(controller_dir)
-        )
+    # Update global status cache
+    global current_status
+    current_status[component.lower()] = {
+        'status': status,
+        'level': level,
+        'timestamp': timestamp,
+        'data': data.get('data', {})
+    }
 
-        # Monitor output and emit via WebSocket
-        while True:
-            output = process.stdout.readline()
-            if output == '' and process.poll() is not None:
-                break
-            if output:
-                # Parse and emit status updates
-                socketio.emit('material_change_log', {'message': output.strip()})
+    # Broadcast to web clients
+    emit('status_update', {
+        'component': component,
+        'status': status,
+        'level': level,
+        'timestamp': timestamp,
+        'data': data.get('data', {})
+    }, broadcast=True, include_self=False)
 
-        # Check if process completed successfully
-        return_code = process.poll()
-        if return_code == 0:
-            socketio.emit('system_alert', {
-                'message': 'Multi-material printing completed successfully',
-                'type': 'success'
-            })
-        else:
-            error_output = process.stderr.read()
-            socketio.emit('system_alert', {
-                'message': f'Print manager failed: {error_output}',
-                'type': 'danger'
-            })
+@socketio.on('file_list_response')
+def handle_file_list_response_from_manager(data):
+    """Forward file list responses from print manager to all web clients."""
+    emit('file_list_response', data, broadcast=True, include_self=False)
 
-        current_status['mm_active'] = False
-        socketio.emit('status_update', current_status)
+@socketio.on('log_message')
+def handle_log_message_from_manager(data):
+    """Handle log messages from print manager"""
+    level = data.get('level', 'info')
+    message = data.get('message', '')
+    component = data.get('component', 'SYSTEM')
+    timestamp = data.get('timestamp', datetime.now().isoformat())
 
-    except Exception as e:
-        print(f"Error running print manager: {e}")
-        socketio.emit('system_alert', {
-            'message': f'Failed to start print manager: {e}',
-            'type': 'danger'
-        })
-        current_status['mm_active'] = False
-        socketio.emit('status_update', current_status)
+    # Broadcast to web clients
+    emit('log_message', {
+        'level': level,
+        'message': message,
+        'component': component,
+        'timestamp': timestamp
+    }, broadcast=True, include_self=False)
+
+def send_command_to_print_manager(command_type, parameters=None, command_id=None):
+    """
+    Send command to print manager via WebSocket.
+
+    This replaces the old shared_status file-based communication.
+    """
+    if not connected_clients['print_manager']:
+        print("Warning: Print manager not connected, cannot send command")
+        return None
+
+    if command_id is None:
+        command_id = f"web_{int(time.time())}_{len(connected_clients['web_clients'])}"
+
+    command_data = {
+        'command_id': command_id,
+        'type': command_type,
+        'parameters': parameters or {},
+        'timestamp': datetime.now().isoformat()
+    }
+
+    print(f"Sending command to print manager: {command_type}")
+
+    # Send command directly to print manager client
+    socketio.emit('command', command_data, to=connected_clients['print_manager'])
+
+    return command_id
+
+def start_status_monitor():  # deprecated
+    pass
+
+def stop_status_monitor():  # deprecated
+    pass
+
 
 if __name__ == '__main__':
     print("Scion Multi-Material Printer Web Interface")
@@ -447,13 +1071,19 @@ if __name__ == '__main__':
     print(f"Controllers available: {CONTROLLERS_AVAILABLE}")
     print(f"Config path: {get_config_path()}")
     print(f"Recipe path: {get_recipe_path()}")
+    print(f"Async mode: {ASYNC_MODE}")
 
-    # Start background monitoring
-    start_status_monitor()
+    # Setup logging integration
+    logging_available = setup_logging_integration()
+    print(f"Logging integration: {'enabled' if logging_available else 'disabled'}")
+
+    print("Expecting external persistent print_manager service (no auto-spawn).")
 
     try:
         # Run the Flask application
-        socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+        # Debug=False ensures single process and stable handler registration.
+        # Use environment variable FLASK_DEBUG only for local dev if needed.
+        socketio.run(app, host='0.0.0.0', port=5000, debug=False)
     except KeyboardInterrupt:
         print("\nShutting down...")
     finally:

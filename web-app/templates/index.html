@@ -56,26 +56,203 @@
             </div>
         </div>
 
+        <!-- Real-Time Operation Status -->
+        <div class="card mb-4">
+            <div class="card-header bg-warning">
+                <h5 class="mb-0"><i class="bi bi-clock"></i> Current Operation & Timing</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <h6>Current Operation</h6>
+                        <p class="fs-5" id="current-operation">
+                            <span class="badge bg-primary" id="operation-badge">{{ status.current_operation or 'idle' }}</span>
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Operation Duration</h6>
+                        <p class="fs-4 fw-bold" id="operation-duration">{{ "%.1f"|format(status.operation_duration or 0) }}s</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Start Time</h6>
+                        <p id="operation-start">{{ status.operation_start_time or '--:--' }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6>Step Progress</h6>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar" role="progressbar" id="step-progress-bar" style="width: 0%">
+                                <span id="step-progress-text">0/0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pump Status Grid -->
+                <hr>
+                <h6><i class="bi bi-droplet"></i> Pump Status</h6>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="pump-a-indicator">
+                                <i class="bi bi-droplet-fill fs-2"></i>
+                                <div class="small">Pump A</div>
+                                <span class="badge bg-secondary" id="pump-a-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="pump-b-indicator">
+                                <i class="bi bi-droplet-fill fs-2"></i>
+                                <div class="small">Pump B</div>
+                                <span class="badge bg-secondary" id="pump-b-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="pump-c-indicator">
+                                <i class="bi bi-droplet-fill fs-2"></i>
+                                <div class="small">Pump C</div>
+                                <span class="badge bg-secondary" id="pump-c-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="pump-indicator" id="drain-pump-indicator">
+                                <i class="bi bi-funnel-fill fs-2"></i>
+                                <div class="small">Drain</div>
+                                <span class="badge bg-secondary" id="drain-pump-status">idle</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Action Cards -->
+        <div class="row mb-4">
+            <div class="col-md-4">
+                <div class="card text-center h-100 quick-action-card border-success">
+                    <div class="card-body">
+                        <i class="bi bi-layers-fill text-success" style="font-size: 3rem;"></i>
+                        <h5 class="card-title mt-2">Multi-Material Recipe</h5>
+                        <p class="card-text small text-muted">Enable automatic material changes during active print</p>
+                        <button class="btn btn-success btn-lg w-100" onclick="startMultiMaterial()" id="start-print-btn">
+                            <i class="bi bi-check-circle"></i> Enable Recipe
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center h-100 quick-action-card border-warning">
+                    <div class="card-body">
+                        <i class="bi bi-droplet-fill text-warning" style="font-size: 3rem;"></i>
+                        <h5 class="card-title mt-2">Test Pumps</h5>
+                        <p class="card-text small text-muted">Quick pump functionality test</p>
+                        <button class="btn btn-warning btn-lg w-100" onclick="quickPumpTest()">
+                            <i class="bi bi-gear-fill"></i> Test All Pumps
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center h-100 quick-action-card border-info">
+                    <div class="card-body">
+                        <i class="bi bi-list-check text-info" style="font-size: 3rem;"></i>
+                        <h5 class="card-title mt-2">Recipe</h5>
+                        <p class="card-text small text-muted">Create or modify material change sequence</p>
+                        <a href="{{ url_for('recipe_page') }}" class="btn btn-info btn-lg w-100">
+                            <i class="bi bi-pencil-fill"></i> Edit Recipe
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Print File Management -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Print Files</h5>
+                <div>
+                    <button class="btn btn-light btn-sm" onclick="refreshPrintFiles()" id="refresh-files-btn">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                    <button class="btn btn-success btn-sm" onclick="showUploadModal()" id="upload-file-btn">
+                        <i class="bi bi-upload"></i> Upload
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div id="print-files-loading" class="text-center p-3" style="display: none;">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading files...</span>
+                    </div>
+                    <div class="mt-2">Loading print files...</div>
+                </div>
+
+                <div id="print-files-empty" class="text-center p-4 text-muted" style="display: none;">
+                    <i class="bi bi-inbox fs-1"></i>
+                    <h6 class="mt-2">No Print Files Found</h6>
+                    <p class="small">Upload .ctb files to the printer to get started</p>
+                </div>
+
+                <div id="print-files-error" class="alert alert-danger" style="display: none;">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <strong>Error:</strong> <span id="print-files-error-message"></span>
+                </div>
+
+                <div id="print-files-list" class="row" style="display: none;">
+                    <!-- Print files will be populated here -->
+                </div>
+
+                <div id="selected-file-info" class="alert alert-info mt-3" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>Selected File:</strong> <span id="selected-file-name"></span>
+                            <br><small class="text-muted">
+                                Size: <span id="selected-file-size"></span> |
+                                Type: <span id="selected-file-type"></span>
+                            </small>
+                        </div>
+                        <div>
+                            <button class="btn btn-danger btn-sm me-2" onclick="clearFileSelection()">
+                                <i class="bi bi-x-circle"></i> Clear
+                            </button>
+                            <button class="btn btn-success btn-sm" onclick="startSelectedPrint()" id="start-selected-print-btn">
+                                <i class="bi bi-play-fill"></i> Start Print
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Current Recipe Display -->
         <div class="card mb-4">
-            <div class="card-header bg-secondary text-white">
+            <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
                 <h5 class="mb-0"><i class="bi bi-list-check"></i> Active Recipe</h5>
+                <span class="badge bg-light text-dark">{{ recipe|length if recipe else 0 }} changes</span>
             </div>
             <div class="card-body">
                 {% if recipe %}
                     <div class="table-responsive">
-                        <table class="table table-sm">
+                        <table class="table table-sm table-hover">
                             <thead>
                                 <tr>
+                                    <th>Order</th>
                                     <th>Layer</th>
                                     <th>Material</th>
                                     <th>Status</th>
+                                    <th>Est. Time</th>
                                 </tr>
                             </thead>
                             <tbody id="recipe-table">
                                 {% for item in recipe %}
                                 <tr data-layer="{{ item.layer }}">
-                                    <td>{{ item.layer }}</td>
+                                    <td><span class="badge bg-outline-secondary">{{ loop.index }}</span></td>
+                                    <td><strong>{{ item.layer }}</strong></td>
                                     <td>
                                         <span class="badge bg-primary">{{ item.material }}</span>
                                     </td>
@@ -88,15 +265,42 @@
                                             <span class="badge bg-light text-dark">Pending</span>
                                         {% endif %}
                                     </td>
+                                    <td class="text-muted">~70s</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                         </table>
                     </div>
+                    <div class="mt-3 p-2 bg-light rounded">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <small class="text-muted">
+                                    <i class="bi bi-clock"></i>
+                                    Total time: ~{{ (recipe|length * 70) }}s
+                                </small>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">
+                                    <i class="bi bi-arrow-right"></i>
+                                    Next: Layer {{ recipe[0].layer if recipe else 'N/A' }}
+                                </small>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">
+                                    <i class="bi bi-droplet"></i>
+                                    Materials: {{ recipe|map(attribute='material')|list|unique|join(', ') if recipe else 'None' }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
                 {% else %}
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle"></i>
-                        No recipe loaded. <a href="{{ url_for('recipe_page') }}" class="alert-link">Create a recipe</a> to begin multi-material printing.
+                    <div class="text-center py-4">
+                        <i class="bi bi-file-earmark-plus text-muted" style="font-size: 3rem;"></i>
+                        <h6 class="text-muted mt-3">No Recipe Loaded</h6>
+                        <p class="text-muted">Create a material change recipe to get started</p>
+                        <a href="{{ url_for('recipe_page') }}" class="btn btn-primary btn-lg">
+                            <i class="bi bi-plus-lg"></i> Create Recipe
+                        </a>
                     </div>
                 {% endif %}
             </div>
@@ -125,25 +329,25 @@
             </div>
             <div class="card-body">
                 <div class="d-grid gap-2">
-                    <button class="btn btn-success btn-lg" onclick="startMultiMaterial()">
-                        <i class="bi bi-play-fill"></i> Start Multi-Material
+                    <button class="btn btn-success btn-lg requires-controller" onclick="startMultiMaterial()">
+                        <i class="bi bi-check-circle"></i> Enable Recipe
                     </button>
 
-                    <button class="btn btn-danger" onclick="stopMultiMaterial()">
-                        <i class="bi bi-stop-fill"></i> Stop Multi-Material
+                    <button class="btn btn-danger requires-controller" onclick="stopMultiMaterial()">
+                        <i class="bi bi-x-circle"></i> Disable Recipe
                     </button>
 
                     <hr>
 
-                    <button class="btn btn-warning" onclick="printerControl('pause')">
+                    <button class="btn btn-warning requires-controller" onclick="printerControl('pause')">
                         <i class="bi bi-pause-fill"></i> Pause Printer
                     </button>
 
-                    <button class="btn btn-info" onclick="printerControl('resume')">
+                    <button class="btn btn-info requires-controller" onclick="printerControl('resume')">
                         <i class="bi bi-play-fill"></i> Resume Printer
                     </button>
 
-                    <button class="btn btn-outline-danger" onclick="printerControl('stop')">
+                    <button class="btn btn-outline-danger requires-controller" onclick="printerControl('stop')">
                         <i class="bi bi-stop-fill"></i> Stop Printer
                     </button>
                 </div>
@@ -201,142 +405,51 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<div id="initial-status-data" data-status='{{ status|tojson|safe }}' hidden></div>
 <script>
-// Dashboard-specific JavaScript functions
-function startMultiMaterial() {
-    showAlert('Starting multi-material printing...', 'info');
-    // This will be implemented to start the print_manager.py process
-    fetch('/api/multi-material/start', {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showAlert('Multi-material printing started successfully', 'success');
-            } else {
-                showAlert('Failed to start multi-material printing: ' + data.message, 'danger');
+// Dashboard-specific helpers built on the shared logic in static/app.js
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.ScionApp) {
+        const statusElement = document.getElementById('initial-status-data');
+        const payload = statusElement ? statusElement.dataset.status : null;
+        if (payload) {
+            try {
+                const snapshot = JSON.parse(payload);
+                window.ScionApp.applyStatusSnapshot(snapshot);
+            } catch (error) {
+                console.warn('Unable to parse initial status snapshot', error);
             }
-        })
-        .catch(error => {
-            showAlert('Error starting multi-material printing: ' + error, 'danger');
-        });
-}
-
-function stopMultiMaterial() {
-    showAlert('Stopping multi-material printing...', 'warning');
-    // This will be implemented to stop the print_manager.py process
-    fetch('/api/multi-material/stop', {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showAlert('Multi-material printing stopped', 'warning');
-            } else {
-                showAlert('Failed to stop multi-material printing: ' + data.message, 'danger');
-            }
-        });
-}
-
-function printerControl(action) {
-    const actionText = action.charAt(0).toUpperCase() + action.slice(1);
-    showAlert(`${actionText}ing printer...`, 'info');
-
-    fetch(`/api/printer/${action}`, {method: 'POST'})
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showAlert(`Printer ${action}d successfully`, 'success');
-            } else {
-                showAlert(`Failed to ${action} printer: ${data.message}`, 'danger');
-            }
-        })
-        .catch(error => {
-            showAlert(`Error ${action}ing printer: ${error}`, 'danger');
-        });
-}
+        }
+        window.ScionApp.renderDashboard();
+    }
+});
 
 function refreshStatus() {
     fetch('/api/status')
         .then(response => response.json())
-        .then(data => updateStatus(data))
+        .then(snapshot => {
+            if (window.ScionApp) {
+                window.ScionApp.applyStatusSnapshot(snapshot);
+                window.ScionApp.renderDashboard();
+            }
+            addLogEntry('Status snapshot refreshed');
+        })
         .catch(error => {
             showAlert('Error refreshing status: ' + error, 'danger');
         });
 }
 
-function updateStatus(status) {
-    // Update printer status
-    document.getElementById('printer-status').innerHTML =
-        `<span class="badge ${getStatusColor(status.printer_status)}">${status.printer_status}</span>`;
-
-    // Update current layer
-    document.getElementById('current-layer').textContent = status.current_layer;
-
-    // Update progress bar
-    const progressBar = document.getElementById('progress-bar');
-    const progressText = document.getElementById('progress-text');
-    progressBar.style.width = status.progress_percent + '%';
-    progressText.textContent = status.progress_percent.toFixed(1) + '%';
-
-    // Update material info
-    document.getElementById('current-material').innerHTML =
-        `<span class="badge bg-info">${status.current_material}</span>`;
-
-    document.getElementById('next-change').innerHTML =
-        `Material <strong>${status.next_material}</strong> at layer <strong>${status.next_change_layer}</strong>`;
-
-    // Update connection status
-    const connectionBadge = document.getElementById('printer-connection');
-    if (status.printer_connected) {
-        connectionBadge.className = 'badge bg-success';
-        connectionBadge.textContent = 'Connected';
-    } else {
-        connectionBadge.className = 'badge bg-danger';
-        connectionBadge.textContent = 'Disconnected';
-    }
-
-    // Update MM status
-    const mmStatus = document.getElementById('mm-status');
-    mmStatus.innerHTML = status.mm_active ?
-        '<span class="badge bg-success">Active</span>' :
-        '<span class="badge bg-secondary">Stopped</span>';
-
-    // Update last update time
-    document.getElementById('last-update').textContent = status.last_update;
-
-    // Update recipe table status
-    updateRecipeTable(status.current_layer, status.next_change_layer);
-}
-
-function updateRecipeTable(currentLayer, nextChangeLayer) {
-    const rows = document.querySelectorAll('#recipe-table tr');
-    rows.forEach(row => {
-        const layer = parseInt(row.dataset.layer);
-        const statusCell = row.querySelector('td:last-child');
-
-        if (layer <= currentLayer) {
-            statusCell.innerHTML = '<span class="badge bg-success">Completed</span>';
-        } else if (layer === nextChangeLayer) {
-            statusCell.innerHTML = '<span class="badge bg-warning">Next</span>';
-        } else {
-            statusCell.innerHTML = '<span class="badge bg-light text-dark">Pending</span>';
-        }
-    });
-}
-
-function getStatusColor(status) {
-    switch(status.toLowerCase()) {
-        case 'printing': return 'bg-success';
-        case 'paused': return 'bg-warning';
-        case 'stopped': return 'bg-danger';
-        case 'idle': return 'bg-info';
-        default: return 'bg-secondary';
-    }
-}
-
 function addLogEntry(message, type = 'info') {
     const log = document.getElementById('activity-log');
+    if (!log) {
+        return;
+    }
+
     const timestamp = new Date().toLocaleTimeString();
-    const typeClass = type === 'error' ? 'text-danger' :
-                     type === 'warning' ? 'text-warning' :
-                     type === 'success' ? 'text-success' : 'text-info';
+    const typeClass = type === 'error' ? 'text-danger'
+        : type === 'warning' ? 'text-warning'
+        : type === 'success' ? 'text-success'
+        : 'text-info';
 
     const entry = document.createElement('div');
     entry.className = `log-entry ${typeClass}`;
@@ -345,7 +458,6 @@ function addLogEntry(message, type = 'info') {
     log.appendChild(entry);
     log.scrollTop = log.scrollHeight;
 
-    // Keep only last 100 entries
     const entries = log.querySelectorAll('.log-entry');
     if (entries.length > 100) {
         entries[0].remove();
@@ -353,18 +465,39 @@ function addLogEntry(message, type = 'info') {
 }
 
 // Socket.IO event handlers specific to dashboard
-socket.on('status_update', function(data) {
-    updateStatus(data);
-    addLogEntry(`Status update: Layer ${data.current_layer}, ${data.printer_status}`);
-});
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait for socket to be initialized by app.js
+    const checkSocket = setInterval(function() {
+        if (window.socket && window.socket.on) {
+            clearInterval(checkSocket);
 
-socket.on('material_change', function(data) {
-    addLogEntry(`Material change: ${data.from_material} → ${data.to_material} at layer ${data.layer}`, 'success');
-});
+            socket.on('status_update', function(data) {
+                if (!data || typeof data !== 'object') {
+                    return;
+                }
 
-socket.on('system_error', function(data) {
-    addLogEntry(`Error: ${data.message}`, 'error');
-    showAlert('System error: ' + data.message, 'danger');
+                if (data.component) {
+                    const detail = data.status ? `: ${data.status}` : '';
+                    addLogEntry(`${data.component}${detail}`);
+                }
+            });
+
+            socket.on('system_error', function(data) {
+                if (!data) {
+                    return;
+                }
+                addLogEntry(`Error: ${data.message}`, 'error');
+                showAlert('System error: ' + data.message, 'danger');
+            });
+
+            socket.on('material_change', function(data) {
+                if (!data) {
+                    return;
+                }
+                addLogEntry(`Material change: ${data.from_material} → ${data.to_material} at layer ${data.layer}`, 'success');
+            });
+        }
+    }, 100);
 });
 </script>
 {% endblock %}

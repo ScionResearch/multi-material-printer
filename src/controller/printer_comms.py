@@ -90,60 +90,38 @@ class PrinterCommunicator:
         
     def _run_printer_command(self, command):
         """
-        Execute printer command via uart-wifi library.
-        Based on newmonox.py implementation with retry logic.
+        Execute printer command via uart-wifi library and return structured response objects.
 
         Args:
             command (str): Command to send ('getstatus', 'gopause', etc.)
 
         Returns:
-            str: Response data or error message
+            Response object or None if failed
         """
         import time
-        from typing import Iterable
 
-        # Try 3 times to get the data (matching newmonox.py behavior)
+        if not UART_WIFI_AVAILABLE:
+            return None
+
+        # Try 3 times to get the data (matching original behavior)
         for attempt in range(3):
             try:
                 uart = UartWifi(self.printer_ip, self.printer_port)
                 responses = uart.send_request(command)
-
-                # Process responses like newmonox.py does
-                import io
-                import contextlib
-
-                output_lines = []
-                if responses is not None and isinstance(responses, Iterable):
-                    for response in responses:
-                        if isinstance(response, MonoXResponseType):
-                            if response is not None and str(response).strip():
-                                # Capture the output from response.print()
-                                f = io.StringIO()
-                                with contextlib.redirect_stdout(f):
-                                    response.print()
-                                output_lines.append(f.getvalue().strip())
-                        elif response is not None and str(response).strip():
-                            output_lines.append(str(response))
-                        else:
-                            output_lines.append(str(response))
-                else:
-                    output_lines.append(str(responses))
-
-                return '\n'.join(output_lines)
-
+                return responses[0] if responses else None  # Return the primary response object
             except ConnectionException:
-                time.sleep(1)  # Wait before retry
-                continue
-
-        # If all 3 attempts failed
-        raise ConnectionException(f"Failed to send command after 3 attempts.")
+                time.sleep(1)
+            except Exception as e:
+                print(f"Error on command '{command}': {e}")
+                time.sleep(1)
+        return None
     
     def get_status(self):
         """
         Get current printer status via uart-wifi.
-        
+
         Returns:
-            str: Status response with state, layer, progress info
+            MonoXStatus object with status information or None if failed
         """
         return self._run_printer_command('getstatus')
     
@@ -189,14 +167,29 @@ class PrinterCommunicator:
     def get_files(self):
         """
         Get list of printable files on printer.
-        
+
         Returns:
             list: Available filenames or empty list if error
         """
-        response = self._run_printer_command('getfiles')
-        if response:
-            return response.split('\n')
-        return []
+        try:
+            file_list_obj = self._run_printer_command('getfile')
+            results = []
+            if file_list_obj and hasattr(file_list_obj, 'files'):
+                for file_entry in getattr(file_list_obj, 'files', []) or []:
+                    try:
+                        results.append({
+                            'name': getattr(file_entry, 'external', getattr(file_entry, 'name', 'Unknown')),
+                            'internal_name': getattr(file_entry, 'internal', ''),
+                            'size': getattr(file_entry, 'size', 0),
+                            'type': getattr(file_entry, 'type', 'CTB'),
+                            'date': getattr(file_entry, 'date', 'Unknown')
+                        })
+                    except Exception:
+                        continue
+            return results
+        except Exception as e:
+            logging.error(f"Failed to retrieve file list: {e}")
+            return []
     
     def start_print(self, filename):
         """
@@ -229,7 +222,8 @@ class PrinterCommunicator:
             bool: True if printer responds
         """
         status = self.get_status()
-        return status is not None and len(status) > 0
+        # A successful call returns a status object, failure returns None.
+        return status is not None
 
     def discover_printer_ip(self, network_base="192.168.4", timeout=2):
         """
@@ -452,7 +446,7 @@ if __name__ == "__main__":
         print("  python printer_comms.py --auto-connect")
         print()
         print("Examples:")
-        print("  python printer_comms.py -i 192.168.4.3 -c getstatus")
+        print("  python printer_comms.py -i 192.168.4.2 -c getstatus")
         print("  python printer_comms.py --discover")
         print("  python printer_comms.py --auto-connect")
         print()

@@ -571,15 +571,54 @@ void Dialog::on_getFiles_clicked()
     if (error.isEmpty())
     {
        QString result = QString::fromUtf8(output);
-       QMessageBox::information(this, "Python Command Result", result);
        logMessage("FILES", "Print files retrieved");
-       ui->textBrowser->append(result);
-       QString resultString(result);
-       QStringList resultlist =
-               resultString.split('\n');
+       ui->textBrowser->append("File list retrieved successfully");
 
-       ui->filesWidget->addItems(resultlist);
+       // Parse the Python output which should be a list representation
+       // The get_files() function returns a list of dictionaries
+       // We need to extract display names and store internal names
 
+       // Clear previous items
+       ui->filesWidget->clear();
+
+       // Use a more sophisticated approach to get properly formatted file list
+       // Create a new Python command that formats the output properly
+       QString scriptPath = ConfigManager::instance().getScriptPath("printer_comms.py");
+       QString printerIP = ConfigManager::instance().getPrinterIP();
+
+       QProcess formatProcess;
+       QString formatCommand = QString(
+           "import sys; sys.path.append('%1'); from printer_comms import get_files; "
+           "files = get_files('%2'); "
+           "for f in files: print(f'{f[\"internal_name\"]}:{f[\"name\"]}') if isinstance(f, dict) else print(f)"
+       ).arg(QFileInfo(scriptPath).absolutePath(), printerIP);
+
+       formatProcess.start("python3", QStringList() << "-c" << formatCommand);
+       formatProcess.waitForFinished();
+
+       QByteArray formattedOutput = formatProcess.readAllStandardOutput();
+       QByteArray formattedError = formatProcess.readAllStandardError();
+
+       if (formattedError.isEmpty()) {
+           QString formattedResult = QString::fromUtf8(formattedOutput);
+           QStringList lines = formattedResult.split('\n', Qt::SkipEmptyParts);
+
+           for (const QString &line : lines) {
+               QStringList parts = line.split(':', Qt::SkipEmptyParts);
+               if (parts.size() >= 2) {
+                   QString internalName = parts[0].trimmed();
+                   QString displayName = parts.mid(1).join(':').trimmed(); // Handle filenames with colons
+
+                   QListWidgetItem *item = new QListWidgetItem(displayName);
+                   item->setData(Qt::UserRole, internalName); // Store internal name for later use
+                   ui->filesWidget->addItem(item);
+               }
+           }
+       } else {
+           // Fallback: try to parse the original output
+           QStringList resultlist = result.split('\n', Qt::SkipEmptyParts);
+           ui->filesWidget->addItems(resultlist);
+       }
     }
     else
     {
@@ -597,20 +636,31 @@ void Dialog::onPrintFileclicked(QListWidgetItem *item)
     QString printerIP = ConfigManager::instance().getPrinterIP();
     QString internalname = "";
     QString externalname = "";
-    QString pythonCommand = QString("python3 -c \"import sys; sys.path.append('%1'); from printer_comms import start_print; start_print('%3', '%2')\"").arg(QFileInfo(scriptPath).absolutePath(), printerIP);
-    QMessageBox::StandardButton reply = QMessageBox::question(this,"Confirmation", "Are you sure you want to print this file?", QMessageBox::Yes | QMessageBox::No);
-    if (reply == QMessageBox::Yes)
-    {
+
+    // Get the internal name from the stored data, or fall back to parsing the text
+    QVariant storedData = item->data(Qt::UserRole);
+    if (storedData.isValid()) {
+        internalname = storedData.toString();
+        externalname = item->text();
+    } else {
+        // Fallback: parse the display text (for compatibility with old format)
         QString itemText = item->text();
         QStringList parts = itemText.split(':');
-        if (parts.size() == 2)
-        {
-            internalname = parts[0];
-            externalname = parts[1];
-            ui->textBrowser->append(internalname);
-            pythonCommand = pythonCommand.arg(internalname);
-            ui->textBrowser->append(pythonCommand);
+        if (parts.size() >= 2) {
+            internalname = parts[0].trimmed();
+            externalname = parts.mid(1).join(':').trimmed();
+        } else {
+            internalname = itemText;
+            externalname = itemText;
         }
+    }
+
+    QMessageBox::StandardButton reply = QMessageBox::question(this,"Confirmation",
+        QString("Are you sure you want to print '%1'?").arg(externalname),
+        QMessageBox::Yes | QMessageBox::No);
+    if (reply == QMessageBox::Yes)
+    {
+        ui->textBrowser->append(QString("Starting print: %1 (Internal: %2)").arg(externalname, internalname));
     }
     else
     {

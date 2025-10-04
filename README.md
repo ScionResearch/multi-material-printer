@@ -8,13 +8,14 @@ The system uses a single-board computer (like a Raspberry Pi) to act as an inter
 
 ## Core Components
 
-1.  **Control Unit:** A Raspberry Pi runs the control software, connects to the printer via Wi-Fi, and interfaces with the MMU hardware via GPIO pins.
-2.  **Graphical User Interface (GUI):** A user-friendly desktop application built with C++/Qt. It serves as the central control panel for all printing and hardware operations.
-3.  **Multi-Material Unit (MMU):** The physical hardware, composed of stepper motors and pumps, responsible for swapping the resins in the printer's vat.
-4.  **Control Scripts:** A collection of Python scripts that handle the low-level logic, including:
-    *   Communicating with the printer to get status, send commands (pause, resume, etc.).
-    *   Controlling the MMU's stepper motors.
-    *   Executing the automated multi-material print cycle.
+> NOTE: The legacy Qt/C++ desktop GUI is now deprecated. The project has transitioned to a web-first architecture using Flask + Socket.IO. The Qt code remains temporarily for reference and will be removed in a future cleanup release.
+
+1. **Control Unit:** Raspberry Pi (or similar SBC) running the Flask web server and the persistent `print_manager` service.
+2. **Web UI (`web-app/`):** Browser-based interface (Flask + Socket.IO + Bootstrap) for recipes, monitoring, diagnostics, manual pump & printer control.
+3. **Print Manager Service:** Long-running Python process (`src/controller/print_manager.py`) – single authority for hardware and printer orchestration; receives commands exclusively via WebSocket events.
+4. **MMU Hardware:** Stepper-driven pumps (drain + material channels) for automated resin exchange sequences.
+5. **Controller Modules:** Python modules for printer communication (`printer_comms.py`), pump/MMU control (`mmu_control.py`), IPC (`websocket_ipc.py`).
+6. **Diagnostics & Calibration:** Web-exposed commands for GPIO/I2C tests and pump calibration flows.
 
 ---
 
@@ -251,23 +252,27 @@ qmake ScionMMUController.pro
 make
 ```
 
-### Architecture Overview
+### Architecture Overview (Current)
 
 ```
-┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
-│   Qt GUI            │    │  Python Controller  │    │  Hardware           │
-│  (ScionMMUController)│◄──►│   (print_manager)   │◄──►│  (Printer + MMU)    │
-└─────────────────────┘    └─────────────────────┘    └─────────────────────┘
+Browser Client(s)  ── WebSocket + REST ──▶  Flask Web App (app.py)
+       ▲                                        │
+       │  status_update / command_result        │ emits 'command'
+       │                                        ▼
+    User UI ◀───────── WebSocket ─────────  Print Manager Service (persistent)
+                                                   │
+                                                   ▼
+                                       Printer (WiFi) + MMU Pumps (GPIO/I2C)
 ```
 
-The GUI application communicates with Python controller modules via subprocess calls and file-based messaging. The Python modules handle low-level hardware communication.
+Key design principles:
+* Single authoritative hardware process (no per-request subprocess spawning).
+* All REST endpoints delegate via WebSocket command emission only—no direct hardware calls.
+* File-based shared status JSON has been removed (replaced by real-time Socket.IO events).
+* 10s quiescent window after a pause prevents race conditions while the printer raises the build plate.
 
-### Key Components
-
-- **GUI (Qt/C++):** User interface, recipe editing, status display
-- **Print Manager (Python):** Orchestrates printing process, monitors printer status
-- **MMU Control (Python):** Pump control, material handling
-- **Printer Comms (Python):** Network communication with 3D printer
+### Legacy Architecture (Deprecated)
+Older releases used a Qt GUI spawning the print manager and polling JSON files for status. This model is retired due to fragility and race conditions.
 
 ## 🧪 Testing
 

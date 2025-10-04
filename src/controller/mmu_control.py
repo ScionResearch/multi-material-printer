@@ -64,9 +64,26 @@ class MMUController:
             # Return default configuration
             return {
                 "pumps": {
-                    "pump_a": {"name": "Pump A", "gpio_pin": 18},
-                    "pump_b": {"name": "Pump B", "gpio_pin": 19},
-                    "drain_pump": {"name": "Drain Pump", "gpio_pin": 20}
+                    "pump_a": {
+                        "name": "Pump A",
+                        "flow_rate_ml_per_second": 2.5,
+                        "max_volume_ml": 500
+                    },
+                    "pump_b": {
+                        "name": "Pump B",
+                        "flow_rate_ml_per_second": 2.5,
+                        "max_volume_ml": 500
+                    },
+                    "pump_c": {
+                        "name": "Pump C",
+                        "flow_rate_ml_per_second": 2.5,
+                        "max_volume_ml": 500
+                    },
+                    "drain_pump": {
+                        "name": "Drain Pump",
+                        "flow_rate_ml_per_second": 5.0,
+                        "max_volume_ml": 1000
+                    }
                 },
                 "material_change": {
                     "drain_volume_ml": 50,
@@ -107,26 +124,19 @@ class MMUController:
             # Material change parameters loaded
 
             # Step 1: Drain current material
-            # Step 1: Drain
-            if not self.run_pump("drain_pump", "forward", drain_volume):
+            if not self.run_pump_volume("drain_pump", "forward", drain_volume):
                 print("ERROR: Could not drain current material")
                 return False
 
             # Step 2: Fill with new material
             pump_name = f"pump_{target_material.lower()}"
-            # Step 2: Fill
-            if not self.run_pump(pump_name, "forward", fill_volume):
+            if not self.run_pump_volume(pump_name, "forward", fill_volume):
                 print(f"ERROR: Could not fill from {pump_name}")
                 return False
 
-            # Step 3: Allow mixing time
-            print(f"Mixing phase - waiting {mixing_time}s...")
-            import time
-            time.sleep(mixing_time)
-            print("Mixing phase completed")
-
-            # Step 4: Settle time
+            # Step 3: Settle time
             print(f"Settling phase - waiting {settle_time}s...")
+            import time
             time.sleep(settle_time)
             print("Settling phase completed")
 
@@ -140,21 +150,19 @@ class MMUController:
             traceback.print_exc()
             return False
     
-    def run_pump(self, pump_name, direction="forward", volume_ml=None):
+    def run_pump(self, pump_name, direction="forward", duration_seconds=10):
         """
-        Control individual pump with timing/volume precision.
+        Control individual pump with duration precision.
 
         Args:
             pump_name (str): Pump name ('pump_a', 'pump_b', 'drain_pump')
             direction (str): 'forward' or 'reverse'
-            volume_ml (float, optional): Volume to pump (default: 10s timing)
+            duration_seconds (float): Duration to run pump in seconds
 
         Returns:
             bool: True if successful
         """
         try:
-            # Running pump: {pump_name}
-
             # Get pump configuration
             pumps = self.pump_config.get("pumps", {})
             if pump_name not in pumps:
@@ -164,16 +172,7 @@ class MMUController:
 
             pump = pumps[pump_name]
             pump_display_name = pump.get('name', pump_name)
-            # Pump: {pump_display_name}, Direction: {direction}
-
-            # Calculate timing if volume is specified
-            if volume_ml:
-                flow_rate = pump.get("flow_rate_ml_per_second", 2.5)
-                timing = volume_ml / flow_rate
-                print(f"Running {pump_display_name}: {volume_ml}ml at {flow_rate}ml/s ({timing:.1f}s)")
-            else:
-                timing = 10  # Default 10 seconds
-                print(f"Running {pump_display_name}: {timing}s")
+            print(f"Running {pump_display_name}: {duration_seconds}s")
 
             # Map pump names to the original script's motor IDs
             motor_map = {
@@ -186,10 +185,8 @@ class MMUController:
             motor_id = motor_map.get(pump_name, "A")
             direction_code = "F" if direction == "forward" else "R"
 
-            # Executing motor {motor_id} {direction_code} for {int(timing)}s
-
             # Call the original pump control function
-            run_stepper(motor_id, direction_code, int(timing))
+            run_stepper(motor_id, direction_code, int(duration_seconds))
 
             print(f"Pump {pump_display_name} completed")
             return True
@@ -200,6 +197,38 @@ class MMUController:
             # Full traceback:
             traceback.print_exc()
             print(f"FAILED: Pump {pump_name} operation failed")
+            return False
+
+    def run_pump_volume(self, pump_name, direction="forward", volume_ml=10):
+        """
+        Control individual pump with volume precision (calculates duration).
+
+        Args:
+            pump_name (str): Pump name ('pump_a', 'pump_b', 'drain_pump')
+            direction (str): 'forward' or 'reverse'
+            volume_ml (float): Volume to pump in milliliters
+
+        Returns:
+            bool: True if successful
+        """
+        try:
+            # Get pump configuration
+            pumps = self.pump_config.get("pumps", {})
+            if pump_name not in pumps:
+                print(f"ERROR: Unknown pump '{pump_name}'")
+                return False
+
+            pump = pumps[pump_name]
+            flow_rate = pump.get("flow_rate_ml_per_second", 2.5)
+            duration_seconds = volume_ml / flow_rate
+
+            pump_display_name = pump.get('name', pump_name)
+            print(f"Running {pump_display_name}: {volume_ml}ml at {flow_rate}ml/s ({duration_seconds:.1f}s)")
+
+            return self.run_pump(pump_name, direction, duration_seconds)
+
+        except Exception as e:
+            print(f"ERROR in volume-based pump control: {e}")
             return False
     
     def calibrate_pump(self, pump_name, test_volume_ml=10):
@@ -255,11 +284,12 @@ def run_pump_by_id(pump_id, direction, timing):
         "C": "pump_c",
         "D": "drain_pump"
     }
-    
+
     pump_name = id_map.get(pump_id.upper(), "pump_a")
     direction_name = "forward" if direction.upper() == "F" else "reverse"
-    
-    return get_controller().run_pump(pump_name, direction_name)
+
+    # Call with duration directly
+    return get_controller().run_pump(pump_name, direction_name, duration_seconds=timing)
 
 
 if __name__ == "__main__":
