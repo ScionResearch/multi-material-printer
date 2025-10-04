@@ -181,6 +181,16 @@ class PrintManager:
         self._experiment_start_time = None
         self._material_change_count = 0
 
+        # Operation tracking for real-time dashboard
+        self._current_operation = 'idle'
+        self._operation_start_time = None
+        self._pump_states = {
+            'pump_a': 'idle',
+            'pump_b': 'idle',
+            'pump_c': 'idle',
+            'drain_pump': 'idle'
+        }
+
         # WebSocket IPC client for real-time communication with web app
         self.websocket_client = None
         self._command_processing_thread = None
@@ -415,6 +425,66 @@ class PrintManager:
                 "last_processed_layer": self._last_processed_layer,
                 "remaining_changes": list(sorted(self.recipe.keys()))
             }
+
+    def _start_operation(self, operation_name: str):
+        """Start tracking a new operation with timestamp."""
+        self._current_operation = operation_name
+        self._operation_start_time = datetime.now().isoformat()
+        self._send_operation_status()
+
+    def _end_operation(self):
+        """End current operation and reset to idle."""
+        self._current_operation = 'idle'
+        self._operation_start_time = None
+        self._send_operation_status()
+
+    def _set_pump_status(self, pump_id: str, status: str):
+        """Update pump status and broadcast."""
+        pump_key = f"pump_{pump_id.lower()}" if pump_id in ['A', 'B', 'C'] else 'drain_pump'
+        if pump_key in self._pump_states:
+            self._pump_states[pump_key] = status
+            self._send_operation_status()
+
+    def _send_operation_status(self):
+        """Send current operation status to frontend."""
+        # Calculate operation duration
+        operation_duration = 0
+        if self._operation_start_time:
+            try:
+                start_time = datetime.fromisoformat(self._operation_start_time)
+                operation_duration = (datetime.now() - start_time).total_seconds()
+            except Exception:
+                operation_duration = 0
+
+        # Send via WebSocket with complete status
+        if self.websocket_client and self.websocket_client.is_connected():
+            self._send_websocket_status_update(
+                "OPERATION_STATUS",
+                f"Operation: {self._current_operation}",
+                {
+                    'current_operation': self._current_operation,
+                    'operation_start_time': self._operation_start_time,
+                    'operation_duration': operation_duration,
+                    'pump_status': self._pump_states.copy()
+                },
+                level="info"
+            )
+
+    def _send_sequence_progress(self, current_step: int, total_steps: int, step_name: str):
+        """Send sequence progress for step tracking."""
+        if self.websocket_client and self.websocket_client.is_connected():
+            self._send_websocket_status_update(
+                "SEQUENCE_PROGRESS",
+                f"Step {current_step}/{total_steps}: {step_name}",
+                {
+                    'sequence_progress': {
+                        'current_step': current_step,
+                        'total_steps': total_steps,
+                        'step_name': step_name
+                    }
+                },
+                level="info"
+            )
 
     def _send_status_update(self, tag: str, message: str, data: Optional[Dict[str, Any]] = None, level: str = "info"):
         """Send status update to queue for GUI consumption and WebSocket/shared status."""
@@ -698,23 +768,28 @@ class PrintManager:
             self._send_status_update("MATERIAL", f"Starting material change to {material}")
 
             # Step 1: Pause printer
+            self._start_operation("Pausing printer")
             self._send_status_update("TIMING", "Step 1: Pausing printer...")
             if not self._pause_printer():
                 self._send_status_update("MATERIAL", "ERROR: Could not pause printer", level="error")
                 self._enter_error_state("Failed to pause printer prior to material change", {"target_material": material})
+                self._end_operation()
                 return False
 
             # Step 2: Wait for bed to rise
+            self._start_operation("Waiting for bed to raise")
             self._send_status_update("TIMING", "Step 2: Waiting for bed to reach raised position...")
             self._wait_for_bed_raised()
 
             # Step 3: Execute material change
+            self._start_operation(f"Material change to {material}")
             self._send_status_update("TIMING", "Step 3: Starting pump sequence...")
             pump_start = time.time()
 
             if mmu_control is None:
                 self._send_status_update("MATERIAL", "ERROR: MMU control not available - imports failed", level="error")
                 self._enter_error_state("MMU controller unavailable", {"cwd": os.getcwd()})
+                self._end_operation()
                 return False
 
             self._send_status_update("TIMING", f"Starting MMU change_material({material})...")
@@ -726,21 +801,26 @@ class PrintManager:
             else:
                 self._send_status_update("MATERIAL", "ERROR: Pump sequence failed", level="error")
                 self._enter_error_state("Pump sequence failed during material change", {"target_material": material, "duration": pump_duration})
+                self._end_operation()
                 return False
 
             # Step 4: Resume printer
+            self._start_operation("Resuming printer")
             self._send_status_update("TIMING", "Step 4: Resuming printer...")
             if self._resume_printer():
                 self._send_status_update("MATERIAL", f"✓ Material change to {material} completed successfully")
+                self._end_operation()
                 return True
             else:
                 self._send_status_update("MATERIAL", "ERROR: Could not resume printer", level="error")
                 self._enter_error_state("Failed to resume printer after material change", {"target_material": material})
+                self._end_operation()
                 return False
 
         except Exception as e:
             self._send_status_update("MATERIAL", f"ERROR: Material change failed: {e}", level="error")
             self._enter_error_state("Unhandled exception in material change", {"error": str(e), "target_material": material})
+            self._end_operation()
             return False
 
     def _enter_error_state(self, reason: str, data: Optional[Dict[str, Any]] = None):
@@ -929,8 +1009,19 @@ class PrintManager:
                 duration = params.get("duration")
 
                 if motor and direction and duration is not None:
+                    self._start_operation(f"Manual pump {motor} {direction}")
                     self._send_status_update("PUMP", f"Executing manual pump command: {motor} {direction} for {duration}s")
+
+                    # Set pump status to running
+                    self._set_pump_status(motor, 'running')
+
+                    # Run pump
                     success = mmu_control.run_pump_by_id(motor, direction, duration)
+
+                    # Reset pump status to idle
+                    self._set_pump_status(motor, 'idle')
+                    self._end_operation()
+
                     self._send_status_update("PUMP", f"Manual pump {motor} {direction} {duration}s: {'success' if success else 'failed'}")
                 else:
                     self._send_status_update("PUMP", "Invalid manual pump command parameters", level="error")
@@ -1091,37 +1182,56 @@ class PrintManager:
 
             # Step 1: Drain current material
             current_step += 1
+            self._start_operation(f"Draining ({current_step}/{total_steps})")
             self._send_status_update("SEQUENCE", f"Step {current_step}/{total_steps}: Draining current material for {drain_time}s",
                                    {"current_step": current_step, "total_steps": total_steps, "step_name": "drain"})
+            # Emit sequence progress
+            self._send_sequence_progress(current_step, total_steps, "Draining")
 
+            self._set_pump_status('D', 'running')
             success = mmu_control.run_pump_by_id('D', 'R', drain_time)  # Use drain pump in reverse
+            self._set_pump_status('D', 'idle')
+
             if not success:
                 self._send_status_update("SEQUENCE", "Drain step failed", level="error")
+                self._end_operation()
                 return False
 
             # Step 2: Fill with new material
             current_step += 1
+            self._start_operation(f"Filling with {target_material} ({current_step}/{total_steps})")
             self._send_status_update("SEQUENCE", f"Step {current_step}/{total_steps}: Filling with material {target_material} for {fill_time}s",
                                    {"current_step": current_step, "total_steps": total_steps, "step_name": "fill"})
+            # Emit sequence progress
+            self._send_sequence_progress(current_step, total_steps, f"Filling {target_material}")
 
+            self._set_pump_status(target_material, 'running')
             success = mmu_control.run_pump_by_id(target_material, 'F', fill_time)
+            self._set_pump_status(target_material, 'idle')
+
             if not success:
                 self._send_status_update("SEQUENCE", "Fill step failed", level="error")
+                self._end_operation()
                 return False
 
             # Step 3: Settle (wait)
             current_step += 1
+            self._start_operation(f"Settling ({current_step}/{total_steps})")
             self._send_status_update("SEQUENCE", f"Step {current_step}/{total_steps}: Settling for {settle_time}s",
                                    {"current_step": current_step, "total_steps": total_steps, "step_name": "settle"})
+            # Emit sequence progress
+            self._send_sequence_progress(current_step, total_steps, "Settling")
 
             time.sleep(settle_time)
 
             self._send_status_update("SEQUENCE", "Material change sequence completed successfully",
                                    {"current_step": total_steps, "total_steps": total_steps, "step_name": "complete"})
+            self._end_operation()
             return True
 
         except Exception as e:
             self._send_status_update("SEQUENCE", f"Material change sequence failed: {e}", level="error")
+            self._end_operation()
             return False
 
     def _test_i2c_communication(self) -> bool:

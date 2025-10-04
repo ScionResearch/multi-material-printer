@@ -836,6 +836,9 @@ function updateGlobalStatus(data) {
         return;
     }
 
+    // Extract payload data - could be at top level or in data.data
+    const payload = data.data || data;
+
     if (data.component !== undefined) {
         handleStatusEvent(data);
     } else if (typeof data === 'object') {
@@ -843,24 +846,24 @@ function updateGlobalStatus(data) {
     }
 
     // Update timing information
-    if (data.operation_duration !== undefined) {
+    if (payload.operation_duration !== undefined) {
         const durationElement = document.getElementById('operation-duration');
         if (durationElement) {
-            durationElement.textContent = data.operation_duration.toFixed(1) + 's';
+            durationElement.textContent = payload.operation_duration.toFixed(1) + 's';
         }
     }
 
-    if (data.current_operation !== undefined) {
+    if (payload.current_operation !== undefined) {
         const operationElement = document.getElementById('operation-badge');
         if (operationElement) {
-            operationElement.textContent = data.current_operation || 'idle';
+            operationElement.textContent = payload.current_operation || 'idle';
 
             operationElement.className = 'badge';
-            if (data.current_operation === 'idle') {
+            if (payload.current_operation === 'idle') {
                 operationElement.classList.add('bg-secondary');
-            } else if (data.current_operation.includes('error')) {
+            } else if (payload.current_operation.includes('error')) {
                 operationElement.classList.add('bg-danger');
-            } else if (data.current_operation.includes('completed')) {
+            } else if (payload.current_operation.includes('completed')) {
                 operationElement.classList.add('bg-success');
             } else {
                 operationElement.classList.add('bg-warning');
@@ -868,15 +871,15 @@ function updateGlobalStatus(data) {
         }
     }
 
-    if (data.operation_start_time) {
+    if (payload.operation_start_time) {
         const startElement = document.getElementById('operation-start');
         if (startElement) {
-            startElement.textContent = formatTimestamp(data.operation_start_time);
+            startElement.textContent = formatTimestamp(payload.operation_start_time);
         }
     }
 
-    if (data.pump_status) {
-        Object.entries(data.pump_status).forEach(([pumpId, status]) => {
+    if (payload.pump_status) {
+        Object.entries(payload.pump_status).forEach(([pumpId, status]) => {
             const statusElement = document.getElementById(`${pumpId}-status`);
             const indicatorElement = document.getElementById(`${pumpId}-indicator`);
 
@@ -912,22 +915,22 @@ function updateGlobalStatus(data) {
         });
     }
 
-    if (data.sequence_progress) {
+    if (payload.sequence_progress) {
         const progressBar = document.getElementById('step-progress-bar');
         const progressText = document.getElementById('step-progress-text');
 
-        if (progressBar && data.sequence_progress.total_steps > 0) {
-            const progress = (data.sequence_progress.current_step / data.sequence_progress.total_steps) * 100;
+        if (progressBar && payload.sequence_progress.total_steps > 0) {
+            const progress = (payload.sequence_progress.current_step / payload.sequence_progress.total_steps) * 100;
             progressBar.style.width = `${progress}%`;
         }
 
         if (progressText) {
-            progressText.textContent = `${data.sequence_progress.current_step}/${data.sequence_progress.total_steps}`;
+            progressText.textContent = `${payload.sequence_progress.current_step}/${payload.sequence_progress.total_steps}`;
         }
     }
 
     renderDashboard();
-    startTimerUpdates(data.operation_start_time);
+    startTimerUpdates(payload.operation_start_time);
 }
 
 // Live timer updates
