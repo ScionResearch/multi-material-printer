@@ -9,7 +9,7 @@ echo ""
 cd /home/pidlp/pidlp/multi-material-printer/src/controller
 
 echo "Starting pump test..."
-python3 mmu_control.py A F 3
+python3 mmu_control.py A F 3 2>&1
 
 echo ""
 echo "=== Test Complete ==="
