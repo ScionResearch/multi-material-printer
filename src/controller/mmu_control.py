@@ -5,7 +5,7 @@ Controls stepper motor-driven pumps via Adafruit motor controllers for automated
 material changes. Interfaces with I2C motor controllers to manage material reservoirs.
 
 Key Features:
-- Automated material change sequences (drain/fill/mix/settle)
+- Automated material change sequences (drain/fill/settle)
 - Individual pump control with volume/timing precision
 - JSON-based pump configuration and calibration
 - Emergency stop and safety features
@@ -33,10 +33,10 @@ except ImportError:
 class MMUController:
     """
     MMU hardware controller for stepper motor-driven pumps.
-    
-    Manages material change workflow: drain -> fill -> mix -> settle.
+
+    Manages material change workflow: drain -> fill -> settle.
     Controls pumps via Adafruit motor controllers over I2C.
-    
+
     Attributes:
         pump_config (dict): Pump profiles and calibration settings
     """
@@ -88,14 +88,13 @@ class MMUController:
                 "material_change": {
                     "drain_volume_ml": 50,
                     "fill_volume_ml": 45,
-                    "mixing_time_seconds": 10,
                     "settle_time_seconds": 5
                 }
             }
     
     def change_material(self, target_material):
         """
-        Execute automated material change: drain -> fill -> mix -> settle.
+        Execute automated material change: drain -> fill -> settle.
 
         Args:
             target_material (str): Target material ('A', 'B', 'C', 'D')
@@ -118,7 +117,6 @@ class MMUController:
             change_config = self.pump_config.get("material_change", {})
             drain_volume = change_config.get("drain_volume_ml", 50)
             fill_volume = change_config.get("fill_volume_ml", 45)
-            mixing_time = change_config.get("mixing_time_seconds", 10)
             settle_time = change_config.get("settle_time_seconds", 5)
 
             # Material change parameters loaded

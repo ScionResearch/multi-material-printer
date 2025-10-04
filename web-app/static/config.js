@@ -65,7 +65,6 @@ function populatePumpSettings(config) {
     // Populate material change settings
     document.getElementById('drain-volume').value = config.material_change.drain_volume_ml;
     document.getElementById('fill-volume').value = config.material_change.fill_volume_ml;
-    document.getElementById('mixing-time').value = config.material_change.mixing_time_seconds;
     document.getElementById('settle-time').value = config.material_change.settle_time_seconds;
 
     // Populate safety settings
@@ -147,7 +146,6 @@ async function savePumpConfig() {
         // Update material change settings
         updatedConfig.material_change.drain_volume_ml = parseInt(document.getElementById('drain-volume').value);
         updatedConfig.material_change.fill_volume_ml = parseInt(document.getElementById('fill-volume').value);
-        updatedConfig.material_change.mixing_time_seconds = parseInt(document.getElementById('mixing-time').value);
         updatedConfig.material_change.settle_time_seconds = parseInt(document.getElementById('settle-time').value);
 
         // Update safety settings
@@ -339,13 +337,34 @@ function startSystemMetricsUpdates() {
 // Quick Action Functions
 async function testSinglePump(pumpId) {
     try {
-        showAlert(`Testing ${pumpId}...`, 'info');
-        // Implementation would call pump test API
-        setTimeout(() => {
-            showAlert(`${pumpId} test completed successfully`, 'success');
-        }, 2000);
+        // Map pump names to motor IDs (A, B, C, D)
+        const pumpIdMap = {
+            'pump_a': 'A',
+            'pump_b': 'B',
+            'pump_c': 'C',
+            'drain_pump': 'D'
+        };
+
+        const motorId = pumpIdMap[pumpId] || pumpId.toUpperCase();
+
+        showAlert(`Testing pump ${motorId}...`, 'info');
+
+        // Run pump for 5 seconds forward as a test
+        const response = await fetch('/api/pump', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ motor: motorId, direction: 'F', duration: 5 })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            showAlert(`Pump ${motorId} test completed successfully`, 'success');
+        } else {
+            throw new Error(result.message || 'Test failed');
+        }
     } catch (error) {
-        showAlert(`Error testing ${pumpId}`, 'danger');
+        console.error(`Error testing ${pumpId}:`, error);
+        showAlert(`Error testing pump: ${error.message}`, 'danger');
     }
 }
 
@@ -384,22 +403,32 @@ async function calibratePumps() {
 
 async function calibrateSinglePump(pumpId) {
     try {
-        if (!confirm(`Start calibration for pump ${pumpId}? This will run test sequences.`)) {
+        // Map pump names to motor IDs (A, B, C, D)
+        const pumpIdMap = {
+            'pump_a': 'A',
+            'pump_b': 'B',
+            'pump_c': 'C',
+            'drain_pump': 'D'
+        };
+
+        const motorId = pumpIdMap[pumpId] || pumpId.toUpperCase();
+
+        if (!confirm(`Start calibration for pump ${motorId}? This will run test sequences.`)) {
             return;
         }
 
-        showAlert(`Starting calibration for ${pumpId}...`, 'info');
+        showAlert(`Starting calibration for pump ${motorId}...`, 'info');
 
-        const response = await fetch(`/api/calibration/pump/${pumpId}`, {
+        const response = await fetch(`/api/calibration/pump/${motorId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
 
         const result = await response.json();
         if (result.success) {
-            showAlert(`Calibration started for pump ${pumpId}. Check status for progress.`, 'success');
+            showAlert(`Calibration started for pump ${motorId}. Check status for progress.`, 'success');
         } else {
-            throw new Error(result.message || `Failed to start calibration for pump ${pumpId}`);
+            throw new Error(result.message || `Failed to start calibration for pump ${motorId}`);
         }
     } catch (error) {
         console.error(`Error starting calibration for pump ${pumpId}:`, error);

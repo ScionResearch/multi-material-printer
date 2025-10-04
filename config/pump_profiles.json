@@ -3,8 +3,8 @@
     "pump_a": {
       "name": "Pump A",
       "description": "Primary material pump",
-      "flow_rate_ml_per_second": 2.5,
-      "max_volume_ml": 500,
+      "flow_rate_ml_per_second": 5.0,
+      "max_volume_ml": 200,
       "calibration": {
         "steps_per_ml": 100,
         "last_calibrated": null
@@ -13,8 +13,8 @@
     "pump_b": {
       "name": "Pump B",
       "description": "Secondary material pump",
-      "flow_rate_ml_per_second": 2.5,
-      "max_volume_ml": 500,
+      "flow_rate_ml_per_second": 5.0,
+      "max_volume_ml": 200,
       "calibration": {
         "steps_per_ml": 100,
         "last_calibrated": null
@@ -23,8 +23,8 @@
     "pump_c": {
       "name": "Pump C",
       "description": "Third material pump",
-      "flow_rate_ml_per_second": 2.5,
-      "max_volume_ml": 500,
+      "flow_rate_ml_per_second": 5.0,
+      "max_volume_ml": 200,
       "calibration": {
         "steps_per_ml": 100,
         "last_calibrated": null
@@ -34,7 +34,7 @@
       "name": "Drain Pump",
       "description": "Vat drainage pump",
       "flow_rate_ml_per_second": 5.0,
-      "max_volume_ml": 1000,
+      "max_volume_ml": 200,
       "calibration": {
         "steps_per_ml": 80,
         "last_calibrated": null
@@ -44,7 +44,6 @@
   "material_change": {
     "drain_volume_ml": 50,
     "fill_volume_ml": 45,
-    "mixing_time_seconds": 10,
     "settle_time_seconds": 5
   },
   "safety": {

@@ -330,8 +330,8 @@ function runSingleStep(step) {
     updateStepStatus(step, 'running');
 
     if (step === 'drain') {
-        // Drain current material (reverse pump)
-        runPump('A', 'R', stepConfig.duration); // Assume pump A for now
+        // Drain current material using drain pump
+        runPump('D', 'F', stepConfig.duration);
     } else if (step === 'fill') {
         // Fill new material (forward pump)
         const material = document.getElementById('fill-material').value;

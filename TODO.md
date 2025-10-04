@@ -4,6 +4,9 @@
 
 - Check that pump status is updating in the UI (pumps turning green when pump is running)
 
+notifications as pop ups
+
+
 
 ### Material Change Testing
 - [x] **Validate material change sequence**
