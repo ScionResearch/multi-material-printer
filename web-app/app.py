@@ -462,7 +462,6 @@ def api_material_change_sequence():
             'target_material': target_material,
             'drain_time': sequence_config.get('drain_time', 30),
             'fill_time': sequence_config.get('fill_time', 25),
-            'mix_time': sequence_config.get('mix_time', 10),
             'settle_time': sequence_config.get('settle_time', 5)
         })
 

@@ -24,7 +24,7 @@
 
                 <!-- Sequence Steps with Timing -->
                 <div class="row">
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <div class="card border-danger" id="step-drain">
                             <div class="card-header bg-danger text-white text-center">
                                 <h6 class="mb-0">1. DRAIN</h6>
@@ -45,7 +45,7 @@
                         </div>
                     </div>
 
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <div class="card border-primary" id="step-fill">
                             <div class="card-header bg-primary text-white text-center">
                                 <h6 class="mb-0">2. FILL</h6>
@@ -72,31 +72,10 @@
                         </div>
                     </div>
 
-                    <div class="col-md-3">
-                        <div class="card border-success" id="step-mix">
-                            <div class="card-header bg-success text-white text-center">
-                                <h6 class="mb-0">3. MIX</h6>
-                            </div>
-                            <div class="card-body text-center">
-                                <div class="mb-2">
-                                    <input type="number" class="form-control form-control-sm"
-                                           id="mix-time" value="10" min="0" max="120">
-                                    <small class="text-muted">seconds</small>
-                                </div>
-                                <button class="btn btn-sm btn-outline-success w-100" onclick="runSingleStep('mix')">
-                                    <i class="bi bi-play"></i> Test Mix
-                                </button>
-                                <div class="mt-2">
-                                    <small id="mix-status" class="text-muted">Ready</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <div class="card border-info" id="step-settle">
                             <div class="card-header bg-info text-white text-center">
-                                <h6 class="mb-0">4. SETTLE</h6>
+                                <h6 class="mb-0">3. SETTLE</h6>
                             </div>
                             <div class="card-body text-center">
                                 <div class="mb-2">
@@ -298,9 +277,9 @@ let sequencePaused = false;
 
 // Timing presets
 const timingPresets = {
-    fast: { drain: 20, fill: 20, mix: 5, settle: 3 },
-    normal: { drain: 30, fill: 25, mix: 10, settle: 5 },
-    thorough: { drain: 45, fill: 35, mix: 15, settle: 8 }
+    fast: { drain: 20, fill: 20, settle: 3 },
+    normal: { drain: 30, fill: 25, settle: 5 },
+    thorough: { drain: 45, fill: 35, settle: 8 }
 };
 
 // Individual pump control
@@ -357,10 +336,6 @@ function runSingleStep(step) {
         // Fill new material (forward pump)
         const material = document.getElementById('fill-material').value;
         runPump(material, 'F', stepConfig.duration);
-    } else if (step === 'mix') {
-        // Mix sequence (alternate directions)
-        logProcess(`Starting mix sequence for ${stepConfig.duration}s`, 'info');
-        // This would implement the mixing logic
     } else if (step === 'settle') {
         // Settle time (wait)
         logProcess(`Settling for ${stepConfig.duration}s`, 'info');
@@ -383,7 +358,6 @@ function getStepConfig(step) {
             duration: parseInt(document.getElementById('fill-time').value),
             material: document.getElementById('fill-material').value
         },
-        mix: { duration: parseInt(document.getElementById('mix-time').value) },
         settle: { duration: parseInt(document.getElementById('settle-time').value) }
     };
     return configs[step];
@@ -426,7 +400,6 @@ function runFullSequence() {
     const sequenceConfig = {
         drain_time: parseInt(document.getElementById('drain-time').value),
         fill_time: parseInt(document.getElementById('fill-time').value),
-        mix_time: parseInt(document.getElementById('mix-time').value),
         settle_time: parseInt(document.getElementById('settle-time').value)
     };
 
@@ -505,7 +478,7 @@ function stopSequence() {
     sequencePaused = false;
 
     // Reset all step statuses
-    ['drain', 'fill', 'mix', 'settle'].forEach(step => {
+    ['drain', 'fill', 'settle'].forEach(step => {
         updateStepStatus(step, 'ready');
     });
 
@@ -551,7 +524,6 @@ function loadPreset(presetName) {
     if (preset) {
         document.getElementById('drain-time').value = preset.drain;
         document.getElementById('fill-time').value = preset.fill;
-        document.getElementById('mix-time').value = preset.mix;
         document.getElementById('settle-time').value = preset.settle;
 
         logProcess(`Loaded ${presetName} timing preset`, 'info');
@@ -564,7 +536,6 @@ function savePreset() {
     const customPreset = {
         drain: parseInt(document.getElementById('drain-time').value),
         fill: parseInt(document.getElementById('fill-time').value),
-        mix: parseInt(document.getElementById('mix-time').value),
         settle: parseInt(document.getElementById('settle-time').value)
     };
 
@@ -701,7 +672,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const preset = JSON.parse(customTiming);
         document.getElementById('drain-time').value = preset.drain;
         document.getElementById('fill-time').value = preset.fill;
-        document.getElementById('mix-time').value = preset.mix;
         document.getElementById('settle-time').value = preset.settle;
     }
 });

@@ -943,10 +943,9 @@ class PrintManager:
                 # Execute complete material change sequence with custom timing
                 drain_time = params.get("drain_time", 30)
                 fill_time = params.get("fill_time", 25)
-                mix_time = params.get("mix_time", 10)
                 settle_time = params.get("settle_time", 5)
 
-                success = self._execute_material_change_sequence(target_material, drain_time, fill_time, mix_time, settle_time)
+                success = self._execute_material_change_sequence(target_material, drain_time, fill_time, settle_time)
 
                 if success:
                     self._send_status_update("SEQUENCE", f"Material change sequence to {target_material} completed successfully")
@@ -1073,7 +1072,7 @@ class PrintManager:
         # Default return for successful command processing
         return True
 
-    def _execute_material_change_sequence(self, target_material: str, drain_time: int, fill_time: int, mix_time: int, settle_time: int) -> bool:
+    def _execute_material_change_sequence(self, target_material: str, drain_time: int, fill_time: int, settle_time: int) -> bool:
         """
         Execute complete material change sequence with custom timing.
 
@@ -1081,14 +1080,13 @@ class PrintManager:
             target_material: Target material (A, B, C, D)
             drain_time: Drain duration in seconds
             fill_time: Fill duration in seconds
-            mix_time: Mix duration in seconds
             settle_time: Settle duration in seconds
 
         Returns:
             True if successful
         """
         try:
-            total_steps = 4
+            total_steps = 3
             current_step = 0
 
             # Step 1: Drain current material
@@ -1111,24 +1109,7 @@ class PrintManager:
                 self._send_status_update("SEQUENCE", "Fill step failed", level="error")
                 return False
 
-            # Step 3: Mix materials (if mix time > 0)
-            if mix_time > 0:
-                current_step += 1
-                self._send_status_update("SEQUENCE", f"Step {current_step}/{total_steps}: Mixing for {mix_time}s",
-                                       {"current_step": current_step, "total_steps": total_steps, "step_name": "mix"})
-
-                # Implement mixing logic - alternate forward/reverse
-                mix_cycles = max(1, mix_time // 2)  # Each cycle is 2 seconds
-                for cycle in range(mix_cycles):
-                    # Forward for 1 second
-                    mmu_control.run_pump_by_id(target_material, 'F', 1)
-                    time.sleep(0.5)  # Small gap between operations
-                    # Reverse for 1 second
-                    mmu_control.run_pump_by_id(target_material, 'R', 1)
-                    if cycle < mix_cycles - 1:  # Don't sleep after last cycle
-                        time.sleep(0.5)
-
-            # Step 4: Settle (wait)
+            # Step 3: Settle (wait)
             current_step += 1
             self._send_status_update("SEQUENCE", f"Step {current_step}/{total_steps}: Settling for {settle_time}s",
                                    {"current_step": current_step, "total_steps": total_steps, "step_name": "settle"})
