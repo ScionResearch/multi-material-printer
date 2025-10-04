@@ -177,11 +177,15 @@ class PrinterCommunicator:
             if file_list_obj and hasattr(file_list_obj, 'files'):
                 for file_entry in getattr(file_list_obj, 'files', []) or []:
                     try:
+                        # Extract file name and type from filename extension
+                        name = getattr(file_entry, 'external', getattr(file_entry, 'name', 'Unknown'))
+                        file_ext = name.split('.')[-1].upper() if '.' in name else 'PWMB'
+
                         results.append({
-                            'name': getattr(file_entry, 'external', getattr(file_entry, 'name', 'Unknown')),
+                            'name': name,
                             'internal_name': getattr(file_entry, 'internal', ''),
-                            'size': getattr(file_entry, 'size', 0),
-                            'type': getattr(file_entry, 'type', 'CTB'),
+                            'size': getattr(file_entry, 'size', None),  # None = unknown, handled by UI
+                            'type': getattr(file_entry, 'type', file_ext),
                             'date': getattr(file_entry, 'date', 'Unknown')
                         })
                     except Exception:

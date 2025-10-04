@@ -8,6 +8,8 @@
 
 - check the logging in system configuration is wired up and functional
 
+- check the layer and prgress increments correctly in the dashboard during a print. the printer can provide more information from the file (total layer height etc) and the status should show increments of the current layer as a percentage of the total layer height for the file. 
+
 
 
 
