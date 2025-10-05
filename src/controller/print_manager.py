@@ -872,12 +872,28 @@ class PrintManager:
         Wait for bed to reach raised position after pause.
 
         Critical timing for material changes - detailed logging for troubleshooting.
+        Uses configurable timing from pump_profiles.json material_change section.
         """
-        self._send_status_update("TIMING", "Bed positioning: Initial 2s pause command delay...")
-        time.sleep(2)
+        # Load timing configuration
+        try:
+            config_path = self._find_config_path() / 'pump_profiles.json'
+            with open(config_path, 'r') as f:
+                pump_config = json.load(f)
+            timing = pump_config.get('material_change', {})
+
+            bed_raise_delay = timing.get('bed_raise_delay_seconds', 2)
+            bed_raise_time = timing.get('bed_raise_time_seconds', 15)
+            bed_raise_safety = timing.get('bed_raise_safety_buffer_seconds', 3)
+        except Exception as e:
+            logger.warning(f"Could not load bed timing config, using defaults: {e}")
+            bed_raise_delay = 2
+            bed_raise_time = 15
+            bed_raise_safety = 3
+
+        self._send_status_update("TIMING", f"Bed positioning: Initial {bed_raise_delay}s pause command delay...")
+        time.sleep(bed_raise_delay)
 
         # Extended wait for mechanical bed movement
-        bed_raise_time = 15
         self._send_status_update("TIMING", f"Bed positioning: {bed_raise_time}s mechanical movement...")
 
         for i in range(bed_raise_time):
@@ -898,8 +914,8 @@ class PrintManager:
             self._send_status_update("TIMING", "WARNING: Could not verify pause status", level="warning")
 
         # Additional safety buffer
-        self._send_status_update("TIMING", "Bed positioning: 3s safety buffer...")
-        time.sleep(3)
+        self._send_status_update("TIMING", f"Bed positioning: {bed_raise_safety}s safety buffer...")
+        time.sleep(bed_raise_safety)
         self._send_status_update("TIMING", "✓ Bed positioning complete - ready for material change")
 
     def _is_print_complete(self, status) -> bool:
@@ -991,7 +1007,6 @@ class PrintManager:
                 try:
                     success = printer_comms.stop_print(self.printer_ip)
                     if success:
-                        self._recipe_active = False  # Also disable recipe when print stops
                         self._send_status_update("PRINTER", "Print job stopped")
                     else:
                         self._send_status_update("PRINTER", "Failed to stop printer", level="error")
