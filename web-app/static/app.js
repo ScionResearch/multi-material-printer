@@ -978,8 +978,10 @@ function updateGlobalStatus(data) {
 
     if (payload.pump_status) {
         Object.entries(payload.pump_status).forEach(([pumpId, status]) => {
-            const statusElement = document.getElementById(`${pumpId}-status`);
-            const indicatorElement = document.getElementById(`${pumpId}-indicator`);
+            // Convert pump_a to pump-a for HTML element IDs
+            const elementId = pumpId.replace(/_/g, '-');
+            const statusElement = document.getElementById(`${elementId}-status`);
+            const indicatorElement = document.getElementById(`${elementId}-indicator`);
 
             if (statusElement) {
                 statusElement.textContent = status;
