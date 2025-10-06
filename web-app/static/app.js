@@ -1409,7 +1409,7 @@ function createFileCard(file) {
                     <i class="bi bi-file-earmark-text fs-2 text-primary"></i>
                 </div>
                 <div class="file-info flex-grow-1">
-                    <h6 class="card-title mb-1 text-truncate" title="${file.name}">${file.name}</h6>
+                    <h6 class="card-title mb-1" style="word-break: break-word;">${file.name}</h6>
                     <p class="card-text small text-muted mb-1">
                         <i class="bi bi-hdd"></i> ${fileSize}
                     </p>
