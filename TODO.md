@@ -12,6 +12,11 @@
   - Frontend: app.js:954,969 - Changed running pumps from bg-warning/text-warning to bg-success/text-success
   - Backend already sends pump_status updates via OPERATION_STATUS events
 
+- ✅ **FIXED** - Bootstrap Icons not loading when accessing Pi UI over network
+  - Issue: CSS used relative paths (fonts/bootstrap-icons.woff2)
+  - Fix: Changed to absolute paths (/static/vendor/fonts/bootstrap-icons.woff2)
+  - Now works both locally on Pi and when accessed from network clients
+
 - check that hardware diagnostics works correctly
 
 - check the logging in system configuration is wired up and functional 
