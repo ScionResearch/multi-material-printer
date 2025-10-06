@@ -11,6 +11,7 @@ const dashboardState = {
         status: 'Unknown',
         connected: false,
         currentLayer: 0,
+        totalLayers: 0,
         progressPercent: 0,
         currentMaterial: 'None',
         nextMaterial: 'None',
@@ -220,6 +221,13 @@ function applyStatusSnapshot(snapshot) {
         }
     }
 
+    if (snapshot.total_layers !== undefined) {
+        const totalLayers = toInt(snapshot.total_layers, printer.totalLayers);
+        if (totalLayers !== null) {
+            printer.totalLayers = totalLayers;
+        }
+    }
+
     if (snapshot.progress_percent !== undefined) {
         const progress = toFloat(snapshot.progress_percent, printer.progressPercent);
         if (progress !== null) {
@@ -277,6 +285,18 @@ function handleStatusEvent(event) {
             const statusValue = normalizePrinterStatusValue(payload.printer_status ?? event.status);
             if (statusValue) {
                 printer.status = statusValue;
+
+                // Reset state when printer is stopped
+                const lower = statusValue.toLowerCase();
+                if (lower === 'stopprn' || lower === 'stopped' || lower === 'idle' || lower === 'ready') {
+                    printer.currentLayer = 0;
+                    printer.totalLayers = 0;
+                    printer.progressPercent = 0;
+                    printer.currentMaterial = 'None';
+                    printer.nextMaterial = 'None';
+                    printer.nextChangeLayer = 0;
+                    printer.mmActive = false;
+                }
             }
             if (payload.printer_connected !== undefined) {
                 printer.connected = Boolean(payload.printer_connected);
@@ -289,6 +309,12 @@ function handleStatusEvent(event) {
                 const layer = toInt(payload.current_layer, printer.currentLayer);
                 if (layer !== null) {
                     printer.currentLayer = layer;
+                }
+            }
+            if (payload.total_layers !== undefined) {
+                const totalLayers = toInt(payload.total_layers, printer.totalLayers);
+                if (totalLayers !== null) {
+                    printer.totalLayers = totalLayers;
                 }
             }
             const statusValue = normalizePrinterStatusValue(payload.printer_status ?? event.status);
@@ -436,7 +462,15 @@ function renderDashboard() {
 
     const layerEl = document.getElementById('current-layer');
     if (layerEl) {
-        layerEl.textContent = printer.currentLayer ?? 0;
+        const currentLayer = printer.currentLayer ?? 0;
+        const totalLayers = printer.totalLayers ?? 0;
+
+        if (totalLayers > 0) {
+            const layerPercent = ((currentLayer / totalLayers) * 100).toFixed(1);
+            layerEl.textContent = `${currentLayer} / ${totalLayers} (${layerPercent}%)`;
+        } else {
+            layerEl.textContent = currentLayer;
+        }
     }
 
     const progressBar = document.getElementById('progress-bar');

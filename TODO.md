@@ -1,14 +1,20 @@
 
 # UI issues
-- after printer stopped current layer and active material should update to cleareared (based on the status mesages sent by the printer) multi material recipe should also stop when the print is stopped.
+- ✅ **FIXED** - after printer stopped current layer and active material should update to cleared (based on the status messages sent by the printer) multi material recipe should also stop when the print is stopped.
+  - Frontend: app.js:289-299 - State reset when printer status is STOPPRN/stopped/idle/ready
+  - Backend: print_manager.py:643-647 - Auto-deactivate recipe when printer stops
+
+- ✅ **FIXED** - check the layer and progress increments correctly in the dashboard during a print. the printer can provide more information from the file (total layer height etc) and the status should show increments of the current layer as a percentage of the total layer height for the file.
+  - Backend: print_manager.py:658-659 - Now sends total_layers and percent_complete
+  - Frontend: app.js:14,224-228,313-318,462-473 - Displays "Layer X / Y (Z%)" format
 
 - Check that pump status is updating in the UI (pumps turning green when pump is running)
 
 - check that hardware diagnostics works correctly
 
-- check the logging in system configuration is wired up and functional
+- check the logging in system configuration is wired up and functional 
 
-- check the layer and prgress increments correctly in the dashboard during a print. the printer can provide more information from the file (total layer height etc) and the status should show increments of the current layer as a percentage of the total layer height for the file. 
+
 
 
 

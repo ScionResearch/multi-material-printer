@@ -640,6 +640,12 @@ class PrintManager:
                 self._send_status_update("PRINTER_STATUS", f"Printer status: {printer_status_str}",
                                        {"printer_connected": True, "printer_status": printer_status_str})
 
+                # Auto-deactivate recipe if printer stops (not paused, but stopped)
+                if self._recipe_active and printer_status_str.lower() in ['stopprn', 'stopped', 'idle', 'ready']:
+                    self._recipe_active = False
+                    self._send_status_update("MATERIAL", "Recipe deactivated - printer stopped",
+                                           {"mm_active": False}, level="warning")
+
                 # Extract current layer
                 current_layer = self._extract_current_layer(status)
                 if current_layer is None:
@@ -649,8 +655,13 @@ class PrintManager:
 
                 # Update current layer in shared status
                 elapsed = time.time() - self._experiment_start_time
+                total_layers = getattr(status, 'total_layers', 0)
+                percent_complete = getattr(status, 'percent_complete', 0)
+
                 layer_data = {
                     "current_layer": current_layer,
+                    "total_layers": total_layers,
+                    "percent_complete": percent_complete,
                     "elapsed_minutes": round(elapsed/60, 1),
                     "printer_connected": True,
                     "printer_status": printer_status_str
