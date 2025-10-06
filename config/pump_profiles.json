@@ -45,6 +45,7 @@
     "drain_volume_ml": 50,
     "fill_volume_ml": 45,
     "settle_time_seconds": 5,
+    "quiescence_seconds": 10,
     "bed_raise_delay_seconds": 2,
     "bed_raise_time_seconds": 15,
     "bed_raise_safety_buffer_seconds": 3

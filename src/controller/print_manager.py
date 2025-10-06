@@ -848,9 +848,19 @@ class PrintManager:
                 return False
             success = printer_comms.pause_print(self.printer_ip)
             if success:
-                # Establish 10 second quiescent window (configurable via env var) to prevent
-                # race conditions where subsequent commands interfere with firmware pause sequence.
-                quiescent_seconds = float(os.environ.get('MMU_PAUSE_QUIESCENCE_SECONDS', '10'))
+                # Establish quiescent window to prevent race conditions where subsequent
+                # commands interfere with firmware pause sequence.
+                # Read from config file, fallback to env var, then default
+                quiescent_seconds = 10.0  # default
+                try:
+                    config_path = self._find_config_path() / 'pump_profiles.json'
+                    with open(config_path, 'r') as f:
+                        pump_config = json.load(f)
+                    quiescent_seconds = float(pump_config.get('material_change', {}).get('quiescence_seconds',
+                                             os.environ.get('MMU_PAUSE_QUIESCENCE_SECONDS', '10')))
+                except Exception:
+                    quiescent_seconds = float(os.environ.get('MMU_PAUSE_QUIESCENCE_SECONDS', '10'))
+
                 self._quiescent_until = time.time() + quiescent_seconds
                 self._send_status_update("QUIESCENCE", f"Quiescent window started for {quiescent_seconds}s after pause")
             return success
