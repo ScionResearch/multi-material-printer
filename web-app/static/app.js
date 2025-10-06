@@ -1535,10 +1535,6 @@ async function startPrintFile(filename, displayName = null) {
     }
 }
 
-// Show upload modal (placeholder)
-function showUploadModal() {
-    showAlert('File upload functionality coming soon!', 'info');
-}
 
 // Helper functions
 function hideAllFileStates() {
