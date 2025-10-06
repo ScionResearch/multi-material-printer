@@ -214,17 +214,18 @@ class PrintManager:
         logger.info(f"Multi-Material Printer Ready - IP: {self.printer_ip}")
 
     def _find_config_path(self) -> Path:
-        """Find configuration file path."""
+        """Find configuration directory path."""
         script_dir = Path(__file__).parent
         config_dir = script_dir.parent.parent / 'config'
-        return config_dir / 'network_settings.ini'
+        return config_dir
 
     def _load_config(self) -> configparser.ConfigParser:
         """Load configuration from INI file."""
         config = configparser.ConfigParser()
         try:
-            config.read(self.config_path)
-            logger.info(f"Loaded configuration from: {self.config_path}")
+            config_file = self.config_path / 'network_settings.ini'
+            config.read(config_file)
+            logger.info(f"Loaded configuration from: {config_file}")
         except Exception as e:
             logger.warning(f"Could not load config file: {e} - using defaults")
         return config
@@ -1513,7 +1514,7 @@ def main():
         logger.info("PrintManager created successfully")
 
         # Load recipe
-        recipe_path = args.recipe or manager._find_config_path().parent / 'recipe.txt'
+        recipe_path = args.recipe or manager._find_config_path() / 'recipe.txt'
         if not manager.load_recipe(str(recipe_path)):
             logger.error("Failed to load recipe")
             return 1
