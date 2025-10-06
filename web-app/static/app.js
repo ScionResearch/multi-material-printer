@@ -951,7 +951,7 @@ function updateGlobalStatus(data) {
                 if (status === 'idle') {
                     statusElement.classList.add('bg-secondary');
                 } else if (status.includes('running')) {
-                    statusElement.classList.add('bg-warning');
+                    statusElement.classList.add('bg-success');
                 } else if (status.includes('error')) {
                     statusElement.classList.add('bg-danger');
                 } else {
@@ -966,7 +966,7 @@ function updateGlobalStatus(data) {
                     if (status === 'idle') {
                         icon.classList.add('bi-droplet', 'text-muted');
                     } else if (status.includes('running')) {
-                        icon.classList.add('bi-droplet-fill', 'text-warning');
+                        icon.classList.add('bi-droplet-fill', 'text-success');
                     } else if (status.includes('error')) {
                         icon.classList.add('bi-droplet-fill', 'text-danger');
                     } else {

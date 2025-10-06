@@ -8,7 +8,9 @@
   - Backend: print_manager.py:658-659 - Now sends total_layers and percent_complete
   - Frontend: app.js:14,224-228,313-318,462-473 - Displays "Layer X / Y (Z%)" format
 
-- Check that pump status is updating in the UI (pumps turning green when pump is running)
+- ✅ **FIXED** - Check that pump status is updating in the UI (pumps turning green when pump is running)
+  - Frontend: app.js:954,969 - Changed running pumps from bg-warning/text-warning to bg-success/text-success
+  - Backend already sends pump_status updates via OPERATION_STATUS events
 
 - check that hardware diagnostics works correctly
 
