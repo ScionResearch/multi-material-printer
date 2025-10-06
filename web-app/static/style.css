@@ -1079,9 +1079,9 @@ footer {
 .file-card .card-title {
     color: var(--white) !important;
     font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    white-space: normal;
     max-width: 100%;
 }
 
