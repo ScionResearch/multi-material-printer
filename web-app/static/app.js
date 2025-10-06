@@ -13,6 +13,8 @@ const dashboardState = {
         currentLayer: 0,
         totalLayers: 0,
         progressPercent: 0,
+        secondsElapsed: null,
+        secondsRemaining: null,
         currentMaterial: 'None',
         nextMaterial: 'None',
         nextChangeLayer: 0,
@@ -235,6 +237,14 @@ function applyStatusSnapshot(snapshot) {
         }
     }
 
+    if (snapshot.seconds_elapsed !== undefined) {
+        printer.secondsElapsed = toInt(snapshot.seconds_elapsed, printer.secondsElapsed);
+    }
+
+    if (snapshot.seconds_remaining !== undefined) {
+        printer.secondsRemaining = toInt(snapshot.seconds_remaining, printer.secondsRemaining);
+    }
+
     if (snapshot.current_material) {
         printer.currentMaterial = snapshot.current_material;
     }
@@ -292,6 +302,8 @@ function handleStatusEvent(event) {
                     printer.currentLayer = 0;
                     printer.totalLayers = 0;
                     printer.progressPercent = 0;
+                    printer.secondsElapsed = null;
+                    printer.secondsRemaining = null;
                     printer.currentMaterial = 'None';
                     printer.nextMaterial = 'None';
                     printer.nextChangeLayer = 0;
@@ -329,6 +341,12 @@ function handleStatusEvent(event) {
                 if (progress !== null) {
                     printer.progressPercent = progress;
                 }
+            }
+            if (payload.seconds_elapsed !== undefined) {
+                printer.secondsElapsed = toInt(payload.seconds_elapsed, printer.secondsElapsed);
+            }
+            if (payload.seconds_remaining !== undefined) {
+                printer.secondsRemaining = toInt(payload.seconds_remaining, printer.secondsRemaining);
             }
             break;
         }
@@ -479,6 +497,24 @@ function renderDashboard() {
         const progress = Number.isFinite(printer.progressPercent) ? Math.min(100, Math.max(0, printer.progressPercent)) : 0;
         progressBar.style.width = `${progress}%`;
         progressText.textContent = `${progress.toFixed(1)}%`;
+    }
+
+    const elapsedEl = document.getElementById('time-elapsed');
+    if (elapsedEl) {
+        if (printer.secondsElapsed !== null && printer.secondsElapsed !== undefined) {
+            elapsedEl.textContent = formatDuration(printer.secondsElapsed);
+        } else {
+            elapsedEl.textContent = '--';
+        }
+    }
+
+    const remainingEl = document.getElementById('time-remaining');
+    if (remainingEl) {
+        if (printer.secondsRemaining !== null && printer.secondsRemaining !== undefined) {
+            remainingEl.textContent = formatDuration(printer.secondsRemaining);
+        } else {
+            remainingEl.textContent = '--';
+        }
     }
 
     const materialEl = document.getElementById('current-material');
@@ -1537,6 +1573,22 @@ async function startPrintFile(filename, displayName = null) {
 
 
 // Helper functions
+function formatDuration(seconds) {
+    if (!seconds || seconds < 0) return '--';
+
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m ${secs}s`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`;
+    } else {
+        return `${secs}s`;
+    }
+}
+
 function hideAllFileStates() {
     const loading = document.getElementById('print-files-loading');
     const empty = document.getElementById('print-files-empty');

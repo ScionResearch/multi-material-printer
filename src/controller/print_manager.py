@@ -657,6 +657,8 @@ class PrintManager:
                 elapsed = time.time() - self._experiment_start_time
                 total_layers = getattr(status, 'total_layers', 0)
                 percent_complete = getattr(status, 'percent_complete', 0)
+                seconds_elapsed = getattr(status, 'seconds_elapse', None)
+                seconds_remaining = getattr(status, 'seconds_remaining', None)
 
                 layer_data = {
                     "current_layer": current_layer,
@@ -666,6 +668,12 @@ class PrintManager:
                     "printer_connected": True,
                     "printer_status": printer_status_str
                 }
+
+                # Add printer-reported timing if available
+                if seconds_elapsed is not None:
+                    layer_data["seconds_elapsed"] = seconds_elapsed
+                if seconds_remaining is not None:
+                    layer_data["seconds_remaining"] = seconds_remaining
 
                 # Only log layer progress when it changes
                 if current_layer != last_layer_logged:
