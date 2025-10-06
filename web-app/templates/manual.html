@@ -172,6 +172,32 @@
             </div>
         </div>
 
+        <!-- Solenoid Air Valve Control -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-wind"></i> Air Valve Control</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    <i class="bi bi-info-circle"></i> Controls air flow to push resin across vat toward drain
+                </p>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-success requires-controller" onclick="solenoidControl('activate')">
+                        <i class="bi bi-toggle-on"></i> Activate Air Flow
+                    </button>
+                    <button class="btn btn-outline-success requires-controller" onclick="solenoidControl('deactivate')">
+                        <i class="bi bi-toggle-off"></i> Deactivate Air Flow
+                    </button>
+                    <button class="btn btn-outline-info requires-controller" onclick="solenoidTest()">
+                        <i class="bi bi-play-circle"></i> Test (2s pulse)
+                    </button>
+                </div>
+                <div class="mt-2">
+                    <small id="solenoid-status" class="text-muted">Status: Unknown</small>
+                </div>
+            </div>
+        </div>
+
         <!-- Individual Pump Controls -->
         <div class="card mb-4">
             <div class="card-header bg-secondary text-white">
@@ -641,6 +667,79 @@ function logProcess(message, type = 'info') {
 function clearLog() {
     document.getElementById('process-log').innerHTML =
         '<div class="log-entry text-info">[Ready] Log cleared</div>';
+}
+
+// Solenoid control functions
+function solenoidControl(action) {
+    const statusElement = document.getElementById('solenoid-status');
+    const actionText = action === 'activate' ? 'Activating' : 'Deactivating';
+
+    statusElement.textContent = `Status: ${actionText}...`;
+    statusElement.className = 'text-warning';
+    logProcess(`${actionText} air valve...`, 'info');
+
+    fetch(`/api/solenoid/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const newStatus = action === 'activate' ? 'Air flowing' : 'Air stopped';
+            statusElement.textContent = `Status: ${newStatus}`;
+            statusElement.className = action === 'activate' ? 'text-success' : 'text-muted';
+            logProcess(`Air valve ${action}d successfully`, 'success');
+            showAlert(`Air valve ${action}d`, 'success');
+        } else {
+            statusElement.textContent = 'Status: Error';
+            statusElement.className = 'text-danger';
+            logProcess(`Air valve ${action} failed: ${data.message}`, 'error');
+            showAlert(`Air valve ${action} failed: ${data.message}`, 'danger');
+        }
+    })
+    .catch(error => {
+        statusElement.textContent = 'Status: Error';
+        statusElement.className = 'text-danger';
+        logProcess(`Air valve ${action} error: ${error}`, 'error');
+        showAlert(`Error controlling air valve: ${error}`, 'danger');
+    });
+}
+
+function solenoidTest() {
+    const statusElement = document.getElementById('solenoid-status');
+
+    statusElement.textContent = 'Status: Testing...';
+    statusElement.className = 'text-info';
+    logProcess('Starting air valve test (2s pulse)...', 'info');
+
+    fetch('/api/solenoid/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ duration: 2 })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            logProcess('Air valve test successful', 'success');
+            showAlert('Air valve test completed', 'success');
+            // Update status after test completes (2s + delay)
+            setTimeout(() => {
+                statusElement.textContent = 'Status: Test complete';
+                statusElement.className = 'text-success';
+            }, 2500);
+        } else {
+            statusElement.textContent = 'Status: Test failed';
+            statusElement.className = 'text-danger';
+            logProcess(`Air valve test failed: ${data.message}`, 'error');
+            showAlert(`Air valve test failed: ${data.message}`, 'danger');
+        }
+    })
+    .catch(error => {
+        statusElement.textContent = 'Status: Error';
+        statusElement.className = 'text-danger';
+        logProcess(`Air valve test error: ${error}`, 'error');
+        showAlert(`Error testing air valve: ${error}`, 'danger');
+    });
 }
 
 // Override global status update handler for sequence progress

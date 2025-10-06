@@ -25,9 +25,11 @@ from pathlib import Path
 # Import the existing pump control functions
 try:
     from .photonmmu_pump import run_stepper
+    from . import solenoid_control
 except ImportError:
     # Fallback for direct execution
     from photonmmu_pump import run_stepper
+    import solenoid_control
 
 
 class MMUController:
@@ -45,6 +47,7 @@ class MMUController:
         """Initialize MMU controller with pump configuration."""
         self.config_path = config_path or self._find_config_path()
         self.pump_config = self._load_pump_config()
+        self._init_solenoid()
         
     def _find_config_path(self):
         """Find pump configuration file path."""
@@ -89,8 +92,23 @@ class MMUController:
                     "drain_volume_ml": 50,
                     "fill_volume_ml": 45,
                     "settle_time_seconds": 5
+                },
+                "solenoid": {
+                    "enabled": False
                 }
             }
+
+    def _init_solenoid(self):
+        """Initialize solenoid if enabled in configuration."""
+        solenoid_config = self.pump_config.get("solenoid", {})
+        if solenoid_config.get("enabled", False):
+            try:
+                solenoid_control.init_solenoid()
+                print(f"Solenoid initialized on GPIO pin {solenoid_config.get('gpio_pin', 22)}")
+            except Exception as e:
+                print(f"Warning: Could not initialize solenoid: {e}")
+        else:
+            print("Solenoid control disabled in configuration")
     
     def change_material(self, target_material):
         """
@@ -121,10 +139,31 @@ class MMUController:
 
             # Material change parameters loaded
 
-            # Step 1: Drain current material
+            # Step 1: Drain current material with air assist
+            solenoid_config = self.pump_config.get("solenoid", {})
+            solenoid_enabled = solenoid_config.get("enabled", False)
+
+            if solenoid_enabled:
+                # Activate solenoid before drain to blow resin toward drain
+                pre_delay = solenoid_config.get("activate_before_drain_delay_seconds", 0.5)
+                print(f"Activating air flow to push resin toward drain (waiting {pre_delay}s)...")
+                solenoid_control.activate_solenoid()
+                import time
+                time.sleep(pre_delay)
+
             if not self.run_pump_volume("drain_pump", "forward", drain_volume):
+                if solenoid_enabled:
+                    solenoid_control.deactivate_solenoid()
                 print("ERROR: Could not drain current material")
                 return False
+
+            if solenoid_enabled:
+                # Keep air flowing briefly after drain completes
+                post_delay = solenoid_config.get("deactivate_after_drain_delay_seconds", 1.0)
+                print(f"Continuing air flow for {post_delay}s to clear remaining resin...")
+                import time
+                time.sleep(post_delay)
+                solenoid_control.deactivate_solenoid()
 
             # Step 2: Fill with new material
             pump_name = f"pump_{target_material.lower()}"

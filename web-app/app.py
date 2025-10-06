@@ -406,6 +406,38 @@ def api_pump_control():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/solenoid/<action>', methods=['POST'])
+def api_solenoid_control(action):
+    """API endpoint for manual solenoid control"""
+    try:
+        if action not in ['activate', 'deactivate', 'test']:
+            return jsonify({'success': False, 'message': 'Invalid action (must be activate, deactivate, or test)'}), 400
+
+        # Test action includes duration parameter
+        duration = None
+        if action == 'test':
+            data = request.json or {}
+            duration = int(data.get('duration', 2))
+            if duration <= 0 or duration > 30:  # Max 30 seconds for test
+                return jsonify({'success': False, 'message': 'Invalid duration (1-30 seconds)'}), 400
+
+        # Send command to print manager
+        command_id = send_command_to_print_manager('solenoid_control', {
+            'action': action,
+            'duration': duration
+        })
+
+        if not command_id:
+            return jsonify({'success': False, 'message': 'Print manager not connected'}), 503
+
+        return jsonify({
+            'success': True,
+            'message': f'Solenoid {action} command sent',
+            'command_id': command_id
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.route('/api/multi-material/start', methods=['POST'])
 def api_start_multi_material():
     """API endpoint to start multi-material printing"""

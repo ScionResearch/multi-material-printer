@@ -59,6 +59,15 @@
     "settle_time_seconds": 5,
     "_comment_step8": "8. Resume printer (automatic)"
   },
+  "solenoid": {
+    "enabled": true,
+    "gpio_pin": 22,
+    "description": "Air valve that blows air across vat to push resin toward drain",
+    "active_during_drain": true,
+    "activate_before_drain_delay_seconds": 0.5,
+    "deactivate_after_drain_delay_seconds": 1.0,
+    "_comment": "Solenoid opens air valve to blow resin from one side of vat to drain side"
+  },
   "safety": {
     "max_pump_runtime_seconds": 300,
     "emergency_stop_enabled": true,

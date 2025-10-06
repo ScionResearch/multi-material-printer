@@ -63,10 +63,11 @@ except ImportError as e:
 # Import controller modules with robust error handling
 mmu_control = None
 printer_comms = None
+solenoid_control = None
 
 def _import_controller_modules():
     """Import controller modules with fallback strategies."""
-    global mmu_control, printer_comms
+    global mmu_control, printer_comms, solenoid_control
 
     logger.debug("Attempting to import controller modules...")
     logger.debug(f"Current working directory: {os.getcwd()}")
@@ -77,6 +78,7 @@ def _import_controller_modules():
         # Try relative imports first (package mode)
         from . import mmu_control
         from . import printer_comms
+        from . import solenoid_control
         logger.info("✓ Relative imports successful")
         return True
     except ImportError as e:
@@ -85,6 +87,7 @@ def _import_controller_modules():
             # Try absolute imports (direct execution mode)
             import mmu_control
             import printer_comms
+            import solenoid_control
             logger.info("✓ Absolute imports successful")
             return True
         except ImportError as e2:
@@ -1077,6 +1080,28 @@ class PrintManager:
                     self._send_status_update("PUMP", f"Manual pump {motor} {direction} {duration}s: {'success' if success else 'failed'}")
                 else:
                     self._send_status_update("PUMP", "Invalid manual pump command parameters", level="error")
+        elif cmd_type == "solenoid_control":
+            if solenoid_control:
+                action = params.get("action")
+                duration = params.get("duration")
+
+                if action == "activate":
+                    self._send_status_update("SOLENOID", "Activating air valve (manual control)")
+                    success = solenoid_control.activate_solenoid()
+                    self._send_status_update("SOLENOID", f"Air valve activation: {'success' if success else 'failed'}")
+                elif action == "deactivate":
+                    self._send_status_update("SOLENOID", "Deactivating air valve (manual control)")
+                    success = solenoid_control.deactivate_solenoid()
+                    self._send_status_update("SOLENOID", f"Air valve deactivation: {'success' if success else 'failed'}")
+                elif action == "test":
+                    test_duration = duration if duration else 2
+                    self._send_status_update("SOLENOID", f"Running solenoid test ({test_duration}s)")
+                    success = solenoid_control.test_solenoid(test_duration)
+                    self._send_status_update("SOLENOID", f"Solenoid test: {'success' if success else 'failed'}")
+                else:
+                    self._send_status_update("SOLENOID", f"Invalid solenoid action: {action}", level="error")
+            else:
+                self._send_status_update("SOLENOID", "Solenoid control module not available", level="error")
         elif cmd_type == "run_material_change":
             # Handle manual material change sequence
             target_material = params.get("target_material")
