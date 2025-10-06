@@ -15,6 +15,7 @@ const dashboardState = {
         progressPercent: 0,
         secondsElapsed: null,
         secondsRemaining: null,
+        printStartTime: null,  // Track when print started for elapsed calculation
         currentMaterial: 'None',
         nextMaterial: 'None',
         nextChangeLayer: 0,
@@ -27,6 +28,30 @@ const dashboardState = {
     },
     lastUpdate: null
 };
+
+// Update elapsed time based on start time
+let elapsedTimeInterval = null;
+function startElapsedTimer() {
+    if (elapsedTimeInterval) {
+        clearInterval(elapsedTimeInterval);
+    }
+    elapsedTimeInterval = setInterval(() => {
+        if (dashboardState.printer.printStartTime) {
+            const elapsed = Math.floor((Date.now() - dashboardState.printer.printStartTime) / 1000);
+            dashboardState.printer.secondsElapsed = elapsed;
+            renderDashboard();
+        }
+    }, 1000);
+}
+
+function stopElapsedTimer() {
+    if (elapsedTimeInterval) {
+        clearInterval(elapsedTimeInterval);
+        elapsedTimeInterval = null;
+    }
+    dashboardState.printer.printStartTime = null;
+    dashboardState.printer.secondsElapsed = null;
+}
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
@@ -237,10 +262,8 @@ function applyStatusSnapshot(snapshot) {
         }
     }
 
-    if (snapshot.seconds_elapsed !== undefined) {
-        printer.secondsElapsed = toInt(snapshot.seconds_elapsed, printer.secondsElapsed);
-    }
-
+    // Note: We calculate elapsed time client-side from print start
+    // Only take remaining time from printer
     if (snapshot.seconds_remaining !== undefined) {
         printer.secondsRemaining = toInt(snapshot.seconds_remaining, printer.secondsRemaining);
     }
@@ -294,11 +317,21 @@ function handleStatusEvent(event) {
         case 'PRINTER_STATUS': {
             const statusValue = normalizePrinterStatusValue(payload.printer_status ?? event.status);
             if (statusValue) {
+                const prevStatus = printer.status;
                 printer.status = statusValue;
 
-                // Reset state when printer is stopped
+                // Start elapsed timer when print starts
                 const lower = statusValue.toLowerCase();
+                if ((lower === 'print' || lower === 'printing') && prevStatus !== statusValue) {
+                    if (!printer.printStartTime) {
+                        printer.printStartTime = Date.now();
+                        startElapsedTimer();
+                    }
+                }
+
+                // Reset state when printer is stopped
                 if (lower === 'stopprn' || lower === 'stopped' || lower === 'idle' || lower === 'ready') {
+                    stopElapsedTimer();
                     printer.currentLayer = 0;
                     printer.totalLayers = 0;
                     printer.progressPercent = 0;
@@ -342,9 +375,7 @@ function handleStatusEvent(event) {
                     printer.progressPercent = progress;
                 }
             }
-            if (payload.seconds_elapsed !== undefined) {
-                printer.secondsElapsed = toInt(payload.seconds_elapsed, printer.secondsElapsed);
-            }
+            // Only take remaining time from printer (elapsed calculated client-side)
             if (payload.seconds_remaining !== undefined) {
                 printer.secondsRemaining = toInt(payload.seconds_remaining, printer.secondsRemaining);
             }
