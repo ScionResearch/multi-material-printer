@@ -71,18 +71,17 @@
 **Impact:** Doubles log entries (1210→605 lines), potential race conditions
 **Evidence:** Every command shows twice in logs 0.3s apart with identical timestamps
 
-##### **Quiescent Window Not Enforced** - print_manager.py:_pause_printer() + _handle_material_change()
+##### **Quiescent Window Not Enforced** - FIXED
 **Root Cause:** Window DECLARED but not WAITED before bed positioning
-- print_manager.py:763: Sets `_quiescent_until = time.time() + 10`
-- print_manager.py:764: Logs "Quiescent window started..."
-- print_manager.py:709: Immediately calls `_wait_for_bed_raised()` (NO WAIT!)
-- _wait_for_bed_raised():796: First actual sleep is 2s (for pause command propagation)
-**Files:**
-- src/controller/print_manager.py:753-768 (_pause_printer)
-- src/controller/print_manager.py:708-709 (_handle_material_change)
-- src/controller/print_manager.py:790-823 (_wait_for_bed_raised)
-**Impact:** Quiescent window never prevents printer polling as intended
-**Evidence:** Logs show all three events at same timestamp (1759544828.0)
+- print_manager.py now waits for quiescent window to expire before bed positioning
+**Fix:** print_manager.py:888-893 - Added explicit wait for quiescent window in _wait_for_bed_raised()
+**New Timeline:**
+  - T+0s: Pause sent, quiescent window set (default 10s)
+  - T+0s-10s: Wait for quiescence (bed raises during this time)
+  - T+10s-12s: Initial delay (2s)
+  - T+12s-27s: Wait for bed movement (15s)
+  - T+27s: Pump sequence starts
+**Impact:** Prevents status queries during critical pause/bed-raise window
 
 ##### **Excessive SocketIO Logging** - websocket_ipc.py + app.py
 **Root Cause:** SocketIO library logger enabled on BOTH client and server

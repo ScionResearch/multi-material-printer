@@ -885,6 +885,13 @@ class PrintManager:
         Critical timing for material changes - detailed logging for troubleshooting.
         Uses configurable timing from pump_profiles.json material_change section.
         """
+        # First, wait for quiescent window to expire before proceeding
+        if time.time() < self._quiescent_until:
+            wait_time = round(self._quiescent_until - time.time(), 2)
+            self._send_status_update("QUIESCENCE", f"Waiting {wait_time}s for quiescent window to expire before bed positioning")
+            while time.time() < self._quiescent_until and not self._stop_event.wait(0.25):
+                pass
+
         # Load timing configuration
         try:
             config_path = self._find_config_path() / 'pump_profiles.json'
