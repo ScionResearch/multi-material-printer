@@ -1202,6 +1202,11 @@ async function printerControl(action) {
 
         if (result.success) {
             showAlert(`Printer ${actionLower}d successfully`, 'success');
+
+            // If stopping, also reset UI state
+            if (actionLower === 'stop') {
+                resetPrintStatus();
+            }
         } else {
             throw new Error(result.message || `Failed to ${actionLower} printer`);
         }
@@ -1210,6 +1215,29 @@ async function printerControl(action) {
         const message = error instanceof Error ? error.message : String(error);
         showAlert(`Error ${actionLower}ing printer: ${message}`, 'danger');
     }
+}
+
+function resetPrintStatus() {
+    const printer = dashboardState.printer;
+
+    // Stop elapsed timer
+    stopElapsedTimer();
+
+    // Reset all print-related state
+    printer.currentLayer = 0;
+    printer.totalLayers = 0;
+    printer.progressPercent = 0;
+    printer.secondsElapsed = null;
+    printer.secondsRemaining = null;
+    printer.currentMaterial = 'None';
+    printer.nextMaterial = 'None';
+    printer.nextChangeLayer = 0;
+    printer.mmActive = false;
+
+    // Re-render dashboard
+    renderDashboard();
+
+    showAlert('Print status reset', 'info', 2000);
 }
 
 async function quickPumpTest() {
