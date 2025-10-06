@@ -173,7 +173,7 @@ class PrintManager:
         self._state_lock = threading.RLock()
 
         # Monitoring configuration
-        self.poll_interval = 5.0  # seconds between status polls
+        self.poll_interval = 4.0  # seconds between status polls
         self.log_cycle_frequency = 20  # log every N cycles (reduced frequency)
         self.progress_frequency = 40  # show progress every N cycles (reduced frequency)
 
@@ -650,7 +650,7 @@ class PrintManager:
                 # Extract current layer
                 current_layer = self._extract_current_layer(status)
                 if current_layer is None:
-                    if not self._stop_event.wait(2.0):
+                    if not self._stop_event.wait(self.poll_interval):
                         continue
                     break
 
