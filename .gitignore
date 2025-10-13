@@ -31,6 +31,7 @@ ScionMMUController
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
 
 # Python virtual environments
 env/

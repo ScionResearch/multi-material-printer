@@ -98,18 +98,14 @@ function createPumpConfigCard(pumpId, pumpData) {
                 </div>
             </div>
             <div class="row mt-2">
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <label class="form-label">Flow Rate (ml/s)</label>
                     <input type="number" class="form-control bg-warning bg-opacity-10" data-pump="${pumpId}" data-field="flow_rate_ml_per_second" value="${pumpData.flow_rate_ml_per_second}" min="0.1" max="10" step="0.1" readonly title="Use Calibration Wizard to update">
                     <small class="text-muted">Last calibrated: ${lastCalibrated}</small>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-6">
                     <label class="form-label">Max Volume (ml)</label>
                     <input type="number" class="form-control" data-pump="${pumpId}" data-field="max_volume_ml" value="${pumpData.max_volume_ml}" min="10" max="2000">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Steps per ml</label>
-                    <input type="number" class="form-control" data-pump="${pumpId}" data-field="steps_per_ml" value="${pumpData.calibration.steps_per_ml}" min="1" max="1000">
                 </div>
             </div>
             <div class="mt-2">
